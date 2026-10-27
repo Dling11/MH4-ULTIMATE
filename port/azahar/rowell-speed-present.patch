@@ -1,0 +1,54 @@
+diff --git a/src/video_core/renderer_vulkan/vk_present_window.h b/src/video_core/renderer_vulkan/vk_present_window.h
+--- a/src/video_core/renderer_vulkan/vk_present_window.h
++++ b/src/video_core/renderer_vulkan/vk_present_window.h
+@@ -102,6 +102,7 @@
+     std::mutex free_mutex;
+     std::jthread present_thread;
+     bool vsync_enabled{};
++    bool accelerated_present{};
+     bool blit_supported;
+     bool use_present_thread{true};
+     void* last_render_surface{};
+diff --git a/src/video_core/renderer_vulkan/vk_present_window.cpp b/src/video_core/renderer_vulkan/vk_present_window.cpp
+--- a/src/video_core/renderer_vulkan/vk_present_window.cpp
++++ b/src/video_core/renderer_vulkan/vk_present_window.cpp
+@@ -108,6 +108,7 @@
+                 emu_window.GetFramebufferLayout().height, surface, low_refresh_rate_},
+       graphics_queue{instance.GetGraphicsQueue()}, present_renderpass{CreateRenderpass()},
+       vsync_enabled{Settings::values.use_vsync.GetValue()},
++      accelerated_present{Settings::GetFrameLimit() > 100 || Settings::GetFrameLimit() == 0},
+       blit_supported{
+           CanBlitToSwapchain(instance.GetPhysicalDevice(), swapchain.GetSurfaceFormat().format)},
+       use_present_thread{Settings::values.async_presentation.GetValue()},
+@@ -435,6 +436,10 @@
+         std::scoped_lock submit_lock{scheduler.submit_mutex};
+         graphics_queue.waitIdle();
+         swapchain.Create(frame->width, frame->height, surface, low_refresh_rate);
++#ifdef ANDROID
++        vsync_enabled = Settings::values.use_vsync.GetValue();
++        accelerated_present = Settings::GetFrameLimit() > 100 || Settings::GetFrameLimit() == 0;
++#endif
+         return true;
+     };
+ 
+@@ -461,6 +466,20 @@
+     if (new_surface_pending && !recreate_swapchain()) {
+         DropFrame(frame);
+         return;
++    }
++
++    // A speed change can need mailbox presentation even though the Android
++    // surface is unchanged. Reuse the live surface: the surface-change path
++    // waits for a replacement surface and must not be used for this.
++    const bool use_vsync = Settings::values.use_vsync.GetValue();
++    const auto limit = Settings::GetFrameLimit();
++    const bool accelerated = limit > 100 || limit == 0;
++    if (accelerated != accelerated_present || use_vsync != vsync_enabled) {
++        std::scoped_lock submit_lock{scheduler.submit_mutex};
++        graphics_queue.waitIdle();
++        swapchain.Create(frame->width, frame->height, surface, low_refresh_rate);
++        accelerated_present = accelerated;
++        vsync_enabled = use_vsync;
+     }
+ #endif
+ 

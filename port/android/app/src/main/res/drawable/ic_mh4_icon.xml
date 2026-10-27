@@ -1,0 +1,4 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="rectangle"><solid android:color="#0C151C" /><corners android:radius="20dp" /><size android:width="108dp" android:height="108dp" /></shape></item>
+    <item android:width="96dp" android:height="63dp" android:gravity="center"><bitmap android:src="@drawable/mh4_logo" android:gravity="fill" android:filter="true" /></item>
+</layer-list>

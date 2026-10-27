@@ -1,0 +1,9 @@
+# Normalize source and shell scripts for cross-platform checkouts.
+* text=auto eol=lf
+
+# Windows batch files need CRLF line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Preserve exact patch bytes recorded in source-basis.json.
+*.patch -text

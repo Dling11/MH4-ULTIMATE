@@ -1,0 +1,103 @@
+{
+  "appName": "Monster Hunter 4 - Rowell",
+  "gameIncluded": false,
+  "upstreamWorkflowRun": 39394095611,
+  "sourceRepository": "https://github.com/klark231/MH4U-Android",
+  "version": "1.0.6",
+  "applicationId": "com.rowell.mh4u",
+  "upstreamApkSha256": "be84e23f127fd91a7227d0051b24e8a9d02c01d246cc297727b3ed53c829948e",
+  "newApkGameplayVerified": false,
+  "sourceCommit": "f73fe36d776911fe04efa8550da2d4f607024b9c",
+  "upstreamApkSourceCommit": "7eea414f20bdc303ddd100ba6a6f3446993c65f7",
+  "upstreamNativeLibraries": [
+    {
+      "name": "libandroidx.graphics.path.so",
+      "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+      "bytes": 10096
+    },
+    {
+      "name": "libfile_redirect_hook.so",
+      "sha256": "f1c609988978ea194c5d772f7816d11282b4f24a9645b3a3cb7c47c47a9628fa",
+      "bytes": 4000
+    },
+    {
+      "name": "libgsl_alloc_hook.so",
+      "sha256": "60cd6d9623fcede4bd4d6397d2655260c783e53009b275077adf78094a4c9a3b",
+      "bytes": 4312
+    },
+    {
+      "name": "libhook_impl.so",
+      "sha256": "8bec9defc05eff740b2fe68e6ed99e2b0b1ed3318d26f5035ed17bebe1319965",
+      "bytes": 277888
+    },
+    {
+      "name": "libmain_hook.so",
+      "sha256": "903a097f59b50067f3387426848820c9b049bae738feb6ea90a0a7e03436e2b7",
+      "bytes": 4216
+    },
+    {
+      "name": "libmh4u-android.so",
+      "sha256": "d1826165fabd8a5a453344068269fdc6e8e1e8d0b6e08a90f8c6c6d0d6d849a8",
+      "bytes": 41518608
+    },
+    {
+      "name": "libSPIRV-Tools-shared.so",
+      "sha256": "c176d9763c41f3f02558612c253127589ea8c856491c8139edb0ccb768a848dd",
+      "bytes": 2620344
+    },
+    {
+      "name": "libyuv.so",
+      "sha256": "6c6eb3802fc1a2af7d4c3018b6bdf3fcc6c1ff161421dfea48cb476b255d2a99",
+      "bytes": 555360
+    }
+  ],
+  "nativeEngineChanged": true,
+  "nativeSourceRepository": "https://github.com/klark231/AzaharPlus",
+  "nativeSourceCommit": "039adda20c31fdf644fd3c9cf6962812ff109818",
+  "nativeBuildMode": "source with the port Android patch and Rowell window-layout and Android speed-presentation patches",
+  "nativePortPatchSha256": "c286d0436eb5a1d7279c9a536972caa8c7ba97edc1d33cb64d38eb743f0f54c5",
+  "nativeToolchain": "NDK 29.0.14206865; CMake 3.28.3; ARM64 API 29; LTO enabled",
+  "upstreamNativeSourceCommit": "039adda20c31fdf644fd3c9cf6962812ff109818",
+  "upstreamNativeSourceRevisionVerified": "Read Common::g_scm_rev from the verified upstream ARM64 library",
+  "nativeLibraries": [
+    {
+      "name": "libSPIRV-Tools-shared.so",
+      "bytes": 2455480,
+      "sha256": "9141c96103f5b27e4dd387e91178a9334c0f86dd2912fde58f813adc0fb8fedd"
+    },
+    {
+      "name": "libandroidx.graphics.path.so",
+      "bytes": 10096,
+      "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6"
+    },
+    {
+      "name": "libfile_redirect_hook.so",
+      "bytes": 4136,
+      "sha256": "bb82bad98f199a06e9f057a2a2b6326a66223b22e24968aefd9a157d7fb37b08"
+    },
+    {
+      "name": "libgsl_alloc_hook.so",
+      "bytes": 4432,
+      "sha256": "1dbaf74dd77ea8c4c86d357815b61667b6cfcd1b855220ad06c5f5f493befea5"
+    },
+    {
+      "name": "libhook_impl.so",
+      "bytes": 251360,
+      "sha256": "a73626c627de656161269f7406143d121ffeca68d673581733e209794fcc0a6c"
+    },
+    {
+      "name": "libmain_hook.so",
+      "bytes": 4336,
+      "sha256": "246f096ea56aa132b6283cebc23a92f5f270c0745e83bca80e71163562fc5f91"
+    },
+    {
+      "name": "libmh4u-android.so",
+      "bytes": 40197272,
+      "sha256": "af43c3b673db9d7138a0addfa5de42063fe21cd082fc04ad4a943d95a5e90d8a"
+    }
+  ],
+  "nativeWindowPatchSha256": "a419c08b4e9f9aebdc81eef4554b050e52c0c500d7b08ebf3f0545b6fe761376",
+  "nativeSpeedPatchSha256": "bc85e1b8ffc2c5fcaddbae3d6f06f0c0e2459844f3688dd261d80f7d51637e74",
+  "newApkGameplayVerification": "Prepared on PC without a phone connection; all 1.0.6 device checks are pending",
+  "nativeAndroidWindowChanges": "Temporary lower-screen focus and a closed-core save-data check; pinned emulator revision and existing core patches unchanged"
+}

@@ -1,0 +1,141 @@
+name: Android (Rowell)
+
+# Builds the Android APK (app + Azahar core + recompiled-code backend).
+# It does NOT build the game's code library (.so): that needs your own dump, so it is
+# built on your PC with port/android/build-code-library.sh and copied to the phone.
+
+on:
+  workflow_dispatch:
+    inputs:
+      azahar_repo:
+        description: "AzaharPlus fork the patch was written against (owner/name)"
+        default: "klark231/AzaharPlus"
+      azahar_ref:
+        description: "Branch, tag or commit of that repo"
+        default: "039adda20c31fdf644fd3c9cf6962812ff109818"
+
+permissions:
+  contents: write   # to attach the APK to a release on tags
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: mh4u
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # If the fork is private, add a secret AZAHAR_TOKEN (a fine-grained token with
+      # read access to contents of that repo). For a public fork it is not needed.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.azahar_repo || 'klark231/AzaharPlus' }}
+          ref: ${{ inputs.azahar_ref || '039adda20c31fdf644fd3c9cf6962812ff109818' }}
+          token: ${{ secrets.AZAHAR_TOKEN || github.token }}
+          submodules: recursive
+          path: azahar
+
+      - name: Apply the port's Android patch
+        working-directory: azahar
+        run: |
+          for patch in ../mh4u/port/azahar/azahar-android.patch ../mh4u/port/azahar/rowell-window-layout.patch ../mh4u/port/azahar/rowell-speed-present.patch; do
+            if git apply --reverse --check "$patch" 2>/dev/null; then
+              echo "patch is already applied, skipping"
+            else
+              git apply --check "$patch"
+              git apply "$patch"
+            fi
+          done
+
+      - name: Check centered screen geometry
+        working-directory: mh4u
+        run: sh scripts/test-android-layout.sh
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: NDK 29 and CMake
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKM=$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          echo "using $SDKM"
+          yes | "$SDKM" --sdk_root="$SDK" --licenses >/dev/null || true
+          "$SDKM" --sdk_root="$SDK" "ndk;29.0.14206865" "cmake;3.28.3" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+          # It scans the whole workspace and trips on SDL's sample wrapper jar under
+          # azahar/externals, which this build never runs (we use the installed Gradle).
+          validate-wrappers: false
+
+      # The one key every build is signed with (docs/ROWELL_RELEASE.md). Without the secrets
+      # signing stops rather than producing an APK with another identity.
+      - name: Signing key
+        id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            umask 077
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mh4u-release.jks"
+            echo "MH4U_KEYSTORE_FILE=$RUNNER_TEMP/mh4u-release.jks" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Configure all four ANDROID signing secrets using the existing Rowell key before building an update"
+            exit 1
+          fi
+
+      - name: Build release APK
+        working-directory: mh4u/port/android
+        env:
+          MH4U_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MH4U_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MH4U_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle testDebugUnitTest assembleRelease lintRelease --no-daemon --max-workers=3 -Pazahar.dir=${{ github.workspace }}/azahar
+
+      - name: Name the APK for download
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          output = pathlib.Path('mh4u/port/android/app/build/outputs/apk/release')
+          metadata = json.loads((output / 'output-metadata.json').read_text())
+          assert metadata['applicationId'] == 'com.rowell.mh4u'
+          build = metadata['elements'][0]
+          destination = pathlib.Path('mh4u/dist')
+          destination.mkdir(exist_ok=True)
+          shutil.copyfile(output / build['outputFile'], destination / f"Monster-Hunter-4-Rowell-{build['versionName']}.apk")
+          PY
+
+      - name: Show the signature
+        run: |
+          APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/35.0.0/apksigner)
+          for apk in mh4u/port/android/app/build/outputs/apk/release/*.apk; do
+            signature=$("$APKSIGNER" verify --print-certs "$apk")
+            printf '%s\n' "$signature" | grep -E "SHA-256|Signer #1 certificate DN"
+            printf '%s\n' "$signature" | grep -q 'Signer #1 certificate SHA-256 digest: 6dd2b9402e12e8298b763e51705190a194a1a9ae3144ff0c93886b5c55667fdc'
+          done
+          rm -f "$RUNNER_TEMP/mh4u-release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Monster-Hunter-4-Rowell-Android
+          path: mh4u/dist/*.apk
+
+      - name: Attach to the release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mh4u/dist/*.apk
+          draft: true
