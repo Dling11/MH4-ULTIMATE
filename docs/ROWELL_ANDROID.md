@@ -227,3 +227,30 @@ bootstrap invokes the local check. See `UPSTREAM_UPDATES.md` for review/rebuild 
 phone-validation requirements. Existing custom controls, save management and the
 owner-confirmed audio/live-menu fixes remain unchanged.
 
+# Version 1.0.17: archive import and matching camera joystick
+
+Home's Add game accepts a decrypted image or a single ZIP / 7Z archive. Archives
+are read through Android's read-only file picker and a seekable descriptor; only
+the game image is extracted, directly into games/. No second compressed copy is
+stored. Providers that cannot seek ask the user to save the archive locally.
+RAR and multipart files ask for manual extraction; nothing is renamed to pretend
+that one part is a complete game. Multiple images ask the user to choose manually.
+
+The importer checks declared size, available storage, output size, archive CRC
+where present, and a 3DS container header. It bounds image size, entry count and
+7Z decoder memory. It never extracts entry paths, overwrites a previous image or
+changes saves, controls or the selected game on failure. Cancellation removes
+temporary output; the next launch also removes this importer's abandoned partials.
+Original downloads remain untouched. Only successful import selects the new image.
+The header check does not prove game region, decryption or complete compatibility.
+
+Apache Commons Compress 1.28.0 and XZ for Java 1.12 provide ZIP/7Z reading. Their
+licences and the transitive Commons dependencies' notices are available in About.
+Zstandard ZIP is not bundled; the importer rejects it before reaching that optional
+native decoder. All seven engine libraries remain identical to 1.0.16.
+
+The camera C-stick now uses the walking pad's same faint background tint, softly
+filled thumb and outline. Positions, opacity settings, palettes, sensitivity and
+input calculations are unchanged. Physical Android picker/cancellation and camera
+appearance still require device validation before declaring the update tested.
+

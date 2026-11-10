@@ -2,11 +2,11 @@
 
 A custom Android app for Monster Hunter 4 Ultimate, with a simpler launcher, organized settings and a movable touch-control editor. Built on the MH4U Android project and Azahar core; see [credits](CREDITS.md).
 
-Version 1.0.16 gives the walking joystick a faint theme-coloured tint while held and a softly filled, outlined moving thumb. The background stays see-through and follows the existing opacity setting. Other controls keep their existing appearance.
+Version 1.0.17 adds automatic ZIP / 7Z game import, storage checks, progress and Cancel. The camera joystick now matches the walking pad's faint theme-coloured fill and outlined thumb. Other controls keep their existing appearance and behaviour.
 
 ## Android download
 
-[Download APK 1.0.16](https://github.com/Dling11/MH4-ULTIMATE/releases/download/rowell-1.0.16/Monster-Hunter-4-1.0.16.apk) · [Android ZIP and release notes](https://github.com/Dling11/MH4-ULTIMATE/releases/tag/rowell-1.0.16)
+[Download APK 1.0.17](https://github.com/Dling11/MH4-ULTIMATE/releases/download/rowell-1.0.17/Monster-Hunter-4-1.0.17.apk) · [Android ZIP and release notes](https://github.com/Dling11/MH4-ULTIMATE/releases/tag/rowell-1.0.17)
 
 This is an experimental Android pre-release. The APK and ZIP contain the same signed app. Version 1.0.14 introduced **30 / 60 / 90 / 120 FPS** targets, with **60** as the default, and records the runtime/source contract for future upstream updates. Live FPS changes require the matching game update and a separately built private code library. They do not recompile the game or restart it for each selection. A short POCO F5 Village test reached **60 FPS at 100% game speed**; 120 FPS caused slow motion in that setup. Full quests, multiplayer and clean installation have not been validated for this FPS setup. A higher cap is not a guarantee of higher FPS.
 
@@ -14,8 +14,17 @@ Android 10+, ARM64 and Vulkan are required. The game is supplied separately and 
 
 ## Install and play
 
+The **1.0.17** update adds automatic import of single ZIP and 7Z game archives,
+with progress, Cancel and storage checks. Choose the archive through **Add game**;
+the image is extracted directly into this app without storing another archive copy.
+Your download is kept. Split and RAR archives still need manual extraction.
+The camera joystick also uses the same faint fill and outline as the walking pad.
+The importer passed 21 synthetic checks and extracted a local 4 GiB image matching
+the existing reference byte for byte. Android file-provider behaviour and the new
+camera appearance still need physical-phone validation.
+
 1. Download and install the APK above, or extract the Android ZIP to find the same installer. For updates, save inside MH4U and install over the existing customized app. Do not uninstall or clear data; this preserves your progress and controls.
-2. Extract your game archive if it is a ZIP, 7Z or multipart download. Open **Monster Hunter 4**, tap **Add game**, and select your decrypted `.3ds`, `.cci` or `.cxi` file. Wait for copying to finish; allow room for the imported copy.
+2. Open **Monster Hunter 4**, tap **Add game**, and select your single ZIP / 7Z archive or decrypted `.3ds`, `.cci` or `.cxi` image. RAR and multipart downloads need manual extraction first. Wait for import to finish; allow space for the extracted image plus 64 MiB working reserve. Your original download is kept.
 3. Tap **Play game**. The first launch creates this app's own save data.
 
 Normal emulation needs only your game. The optional recompiled library and USA v1.3.0 update are under **Settings → Advanced**. No game files are included.

@@ -3,10 +3,10 @@
   "gameIncluded": false,
   "upstreamWorkflowRun": 39394095611,
   "sourceRepository": "https://github.com/klark231/MH4U-Android",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "applicationId": "com.rowell.mh4u",
   "upstreamApkSha256": "be84e23f127fd91a7227d0051b24e8a9d02c01d246cc297727b3ed53c829948e",
-  "newApkGameplayVerified": true,
+  "newApkGameplayVerified": false,
   "sourceCommit": "f73fe36d776911fe04efa8550da2d4f607024b9c",
   "upstreamApkSourceCommit": "7eea414f20bdc303ddd100ba6a6f3446993c65f7",
   "upstreamNativeLibraries": [

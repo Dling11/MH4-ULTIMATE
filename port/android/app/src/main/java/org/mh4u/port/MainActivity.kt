@@ -31,10 +31,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.mh4u.port.gameimport.DocumentGameSource
+import org.mh4u.port.gameimport.GameImageImporter
+import org.mh4u.port.gameimport.GameImportProgress
 import org.mh4u.port.saves.SaveGameSession
 import org.mh4u.port.ui.*
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Rowell's Android launcher. Importing a game is the only required setup. */
 class MainActivity : ComponentActivity() {
@@ -56,6 +65,11 @@ class MainActivity : ComponentActivity() {
         var revision by remember { mutableIntStateOf(0) }
         var busy by remember { mutableStateOf("") }
         var progress by remember { mutableFloatStateOf(-1f) }
+        var importingGame by remember { mutableStateOf(false) }
+        var cancelling by remember { mutableStateOf(false) }
+        val importCancelled = remember { AtomicBoolean(false) }
+        val importUpdates = remember { MutableStateFlow(GameImportProgress("Reading game file…")) }
+        val importProgress by importUpdates.collectAsState()
         val scope = rememberCoroutineScope()
         val game = remember(revision) { Prefs.gameFile() }
         val saveSession = object : SaveGameSession {
@@ -71,7 +85,11 @@ class MainActivity : ComponentActivity() {
             override fun importFailed(message: String) { lastMessage = message }
         }
         BackHandler(screen != "home" && busy.isEmpty()) { screen = "home" }
+        fun cancelImport() { importCancelled.set(true); cancelling = true }
+        BackHandler(busy.isNotEmpty()) { if (importingGame) cancelImport() }
+        DisposableEffect(Unit) { onDispose { importCancelled.set(true) } }
         LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) { GameImageImporter.removeAbandoned(Storage.games) }
             if (intent.getBooleanExtra(EXTRA_SAVE_IMPORTED, false)) {
                 intent.removeExtra(EXTRA_SAVE_IMPORTED)
                 if (FileWork.recoveryError.isEmpty() && !File(Storage.root, ".save-restore").exists() && Prefs.gameFile() != null) {
@@ -114,12 +132,25 @@ class MainActivity : ComponentActivity() {
 
         val pickGame = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) scope.launch {
-                busy = "Adding your game…"; progress = -1f; lastMessage = ""
+                busy = "Adding your game…"; progress = -1f; lastMessage = ""; importingGame = true
+                cancelling = false; importCancelled.set(false)
+                importUpdates.value = GameImportProgress("Reading game file…")
                 try {
-                    val added = copyDocument(uri, Storage.games, setOf("3ds", "cci", "cxi"))
+                    val context = currentCoroutineContext()
+                    val added = FileWork.run(idleGame = true) {
+                        GameImageImporter(Storage.games).importGame(DocumentGameSource(contentResolver, uri),
+                            report = { importUpdates.value = it }, checkCancelled = {
+                                context.ensureActive()
+                                if (importCancelled.get()) throw CancellationException("Import cancelled")
+                            })
+                    }
                     Prefs.gamePath = "!${added.absolutePath}"; revision++; screen = "home"
-                } catch (e: Exception) { lastMessage = e.message ?: "The game could not be added." }
-                finally { busy = "" }
+                    lastMessage = "Game added. Your download was kept; tap Play game when ready."
+                } catch (e: CancellationException) {
+                    if (!currentCoroutineContext().isActive) throw e
+                    screen = "home"; lastMessage = "Game import cancelled. Your previous game and saves are unchanged."
+                } catch (e: Exception) { screen = "home"; lastMessage = e.message ?: "The game could not be added." }
+                finally { importingGame = false; busy = ""; cancelling = false }
             }
         }
         val pickLibrary = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -149,9 +180,16 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                 if (busy.isNotEmpty()) {
                     Column(Modifier.padding(20.dp)) {
-                        Text(busy); Spacer(Modifier.height(12.dp))
-                        if (progress >= 0) { LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()); Hint("${(progress * 100).toInt()}% · Please keep this app open.") }
+                        Text(if (importingGame) { if (cancelling) "Cancelling import…" else importProgress.message } else busy)
+                        Spacer(Modifier.height(12.dp))
+                        val shownProgress = if (importingGame) importProgress.fraction else progress
+                        if (shownProgress >= 0) { LinearProgressIndicator(progress = { shownProgress }, modifier = Modifier.fillMaxWidth()); Hint("${(shownProgress * 100).toInt()}% · Please keep this app open.") }
                         else LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (importingGame) {
+                            if (importProgress.total > 0) Hint("${importProgress.bytes / (1024 * 1024)} / ${importProgress.total / (1024 * 1024)} MB")
+                            Hint("The game image is added directly to this app. Your original download is kept.")
+                            TextButton(enabled = !cancelling, onClick = { cancelImport() }) { Text("Cancel") }
+                        }
                     }
                 } else when (screen) {
                     "settings" -> SettingsHub(initialSection = settingsSection, onPickGame = { pickGame.launch(arrayOf("*/*")) }, onPickLibrary = { pickLibrary.launch(arrayOf("*/*")) }, onPickUpdate = { pickUpdate.launch(arrayOf("*/*")) }, saveSession = saveSession)
@@ -204,7 +242,7 @@ class MainActivity : ComponentActivity() {
         Image(painterResource(R.drawable.mh4_logo), "Monster Hunter 4 Ultimate logo", Modifier.size(56.dp))
         Column(Modifier.weight(1f)) {
             Text("Monster Hunter 4 Ultimate", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(game?.name ?: "Choose your decrypted game image to get started.", color = Mh4uColors.TextDisabled, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(game?.name ?: "Choose a game image or a ZIP / 7Z archive. The app extracts it for you.", color = Mh4uColors.TextDisabled, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (game != null) TextButton(enabled = !FileWork.busy, onClick = onChoose, contentPadding = PaddingValues(horizontal = 0.dp)) {
                 Icon(Icons.Rounded.FolderOpen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Change game", fontSize = 12.sp)
             }

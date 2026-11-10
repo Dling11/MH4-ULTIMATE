@@ -70,6 +70,7 @@ import java.io.File
                     SectionTitle("Your game")
                     Panel {
                         Text(Prefs.gameFile()?.name ?: "No game added")
+                        Hint("Add a .3ds, .cci or .cxi game image, or a single ZIP / 7Z archive. Split and RAR archives need manual extraction.")
                         Spacer(Modifier.height(12.dp))
                         if (onPickGame != null) AmberButton("Choose game") { onPickGame() } else Hint("Choose another game from Home after closing this session.")
                     }
@@ -214,6 +215,7 @@ private fun recompiledOptionsAvailable() = hasCodeLibrary() && (!Native.isRunnin
     val context = LocalContext.current
     val version = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var license by remember { mutableStateOf(false) }
+    var archiveLicenses by remember { mutableStateOf(false) }
     SettingsColumn {
         Text("Monster Hunter 4", fontSize = 26.sp, fontWeight = FontWeight.Bold)
         Hint("Version $version · Android")
@@ -221,6 +223,8 @@ private fun recompiledOptionsAvailable() = hasCodeLibrary() && (!Native.isRunnin
         SectionTitle("Built with the community")
         Panel { Text("Android base: klark231 / MH4U-Android"); Spacer(Modifier.height(8.dp)); Text("Original port: CompaLarios18 / MH4UltimateDC"); Spacer(Modifier.height(8.dp)); Text("Emulator core: Azahar / AzaharPlus"); Spacer(Modifier.height(8.dp)); Hint("Monster Hunter 4 Ultimate and its game content belong to Capcom. Game files are not included.") }
         QuietButton("Open-source licence") { license = true }
+        QuietButton("Archive library licences") { archiveLicenses = true }
     }
     if (license) AlertDialog(onDismissRequest = { license = false }, title = { Text("GNU GPL version 3") }, text = { Text(remember { context.assets.open("LICENSE.txt").bufferedReader().use { it.readText() } }, modifier = Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState()), fontSize = 12.sp) }, confirmButton = { TextButton(onClick = { license = false }) { Text("Close") } })
+    if (archiveLicenses) AlertDialog(onDismissRequest = { archiveLicenses = false }, title = { Text("Archive library licences") }, text = { Text(remember { context.assets.open("archive-licenses.txt").bufferedReader().use { it.readText() } }, modifier = Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState()), fontSize = 12.sp) }, confirmButton = { TextButton(onClick = { archiveLicenses = false }) { Text("Close") } })
 }

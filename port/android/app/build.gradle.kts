@@ -21,8 +21,8 @@ android {
         minSdk = 29
         targetSdk = 35
         // CI passes its run number, so every build counts as newer than the last
-        versionCode = System.getenv("MH4U_VERSION_CODE")?.toIntOrNull() ?: 17
-        versionName = "1.0.16"
+        versionCode = System.getenv("MH4U_VERSION_CODE")?.toIntOrNull() ?: 18
+        versionName = "1.0.17"
         ndk { abiFilters += listOf("arm64-v8a") }
         if (!usePrebuiltEngine) externalNativeBuild {
             cmake {
@@ -98,6 +98,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("org.tukaani:xz:1.12")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

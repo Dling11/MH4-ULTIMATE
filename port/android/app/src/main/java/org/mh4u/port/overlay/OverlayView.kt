@@ -292,21 +292,17 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
             stroke.strokeWidth = if (c === selected && editing) 6f else 3f + 2f * feedback
             when (c.kind) {
                 Control.Kind.CIRCLE_PAD, Control.Kind.C_STICK -> {
-                    // Keep the walking pad's theme tint faint, including while held.
-                    if (c.kind == Control.Kind.CIRCLE_PAD) {
-                        fill.color = ColorUtils.blendARGB(FRAME, accent, feedback)
-                        fill.alpha = (a * (.08f + .06f * feedback)).toInt()
-                    }
+                    // Walking and camera pads share a faint theme tint, including while held.
+                    fill.color = ColorUtils.blendARGB(FRAME, accent, feedback)
+                    fill.alpha = (a * (.08f + .06f * feedback)).toInt()
                     canvas.drawCircle(cx(c), cy(c), r, fill); canvas.drawCircle(cx(c), cy(c), r, stroke)
                     val s = sticks[c]
                     val kx = cx(c) + (s?.get(0) ?: 0f) * r * 0.6f
                     val ky = cy(c) - (s?.get(1) ?: 0f) * r * 0.6f
                     fill.color = accent
-                    fill.alpha = if (c.kind == Control.Kind.CIRCLE_PAD) (a * (.22f + .08f * feedback)).toInt() else a
+                    fill.alpha = (a * (.22f + .08f * feedback)).toInt()
                     canvas.drawCircle(kx, ky, r * 0.38f, fill)
-                    if (c.kind == Control.Kind.CIRCLE_PAD) {
-                        canvas.drawCircle(kx, ky, r * 0.38f, stroke)
-                    }
+                    canvas.drawCircle(kx, ky, r * 0.38f, stroke)
                     label(canvas, if (c.kind == Control.Kind.C_STICK) "C" else "", cx(c), cy(c) - r - 6f, r * 0.25f, a)
                 }
                 Control.Kind.DPAD -> drawDpad(canvas, c, r, a)

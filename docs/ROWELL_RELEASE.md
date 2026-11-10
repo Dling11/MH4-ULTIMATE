@@ -1,19 +1,19 @@
 # Publish the Android download
 
-Version 1.0.16 gives only the walking joystick a faint theme-coloured fill while retaining the 1.0.14 FPS controls and the earlier launcher, settings, touch editor, saves and screen fixes. `.gitignore` excludes game data, builds, signing keys and private caches. Keep `LICENSE`, `CREDITS.md`, dependency notices and the source files. The owner accepted the joystick revision on a POCO F5 and authorized publishing this pre-release.
+Version 1.0.17 adds ZIP / 7Z game import and gives the camera joystick the walking pad's faint fill and outline. The engine, FPS setup, controls, saves and package identity are unchanged. `.gitignore` excludes game data, builds, signing keys and private caches. Keep `LICENSE`, `CREDITS.md`, dependency notices and source files. The owner authorized publishing this experimental pre-release; the new Android import flow and camera appearance still need physical-phone validation.
 
 ## Publish the verified APK
 
 1. Commit and push the source when ready. On GitHub, open **Releases â†’ Draft a new release**.
-2. Create the tag **`rowell-1.0.16`** on that source commit. Use **Monster Hunter 4 1.0.16** as the release title.
+2. Create the tag **`rowell-1.0.17`** on that source commit. Use **Monster Hunter 4 1.0.17** as the release title.
 3. Add these local files as release assets:
-   - `dist/Monster-Hunter-4-1.0.16.apk`
-   - `dist/Monster-Hunter-4-Android-1.0.16.zip`
-   - `dist/Monster-Hunter-4-Android-1.0.16.zip.sha256`
-   - `dist/1.0.16/SHA256SUMS.txt`
+   - `dist/Monster-Hunter-4-1.0.17.apk`
+   - `dist/Monster-Hunter-4-Android-1.0.17.zip`
+   - `dist/Monster-Hunter-4-Android-1.0.17.zip.sha256`
+   - `dist/1.0.17/SHA256SUMS.txt`
 4. Publish the release, optionally marking it as a pre-release. Add public download links only when the owner enables publication.
 
-The current APK size and SHA256 are recorded in `dist/1.0.16/VERSION.json` and `dist/1.0.16/SHA256SUMS.txt` after verification. That metadata also records which phone checks have been completed. The owner accepted the 1.0.16 walking-pad appearance after a pressed/dragged control check. The short 1.0.14 Village FPS check is documented separately in `UPSTREAM_UPDATES.md`; it is not full quest or multiplayer validation.
+The current APK size and SHA256 are recorded in `dist/1.0.17/VERSION.json` and `dist/1.0.17/SHA256SUMS.txt` after verification. All 82 JVM checks and Android lint passed. A local 7Z archive extracted to a 4 GiB image matching its reference byte for byte. The Android picker, cancellation and new camera appearance still need phone validation. The short 1.0.14 Village FPS check is documented separately in `UPSTREAM_UPDATES.md`; it is not full quest or multiplayer validation.
 
 The Android ZIP contains this same APK, instructions, version/check metadata, licence and credits. GitHub's automatically generated Source code archives are separate from the installable assets. Upload the APK and ZIP through Releases; keep build output out of the source history.
 
