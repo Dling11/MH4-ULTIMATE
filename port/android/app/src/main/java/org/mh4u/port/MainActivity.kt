@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import org.mh4u.port.saves.SaveGameSession
 import org.mh4u.port.ui.*
 import java.io.File
 import java.io.IOException
@@ -45,6 +48,8 @@ class MainActivity : ComponentActivity() {
         installInputDispatch(onKey = { MH4UInput.learning() && MH4UInput.onKey(it) }, onMotion = { MH4UInput.learning() && MH4UInput.onMotion(it) })
     }
 
+    companion object { const val EXTRA_SAVE_IMPORTED = "saved_progress_imported" }
+
     @Composable private fun Launcher() {
         var screen by rememberSaveable { mutableStateOf("home") }
         var settingsSection by rememberSaveable { mutableStateOf("") }
@@ -53,7 +58,29 @@ class MainActivity : ComponentActivity() {
         var progress by remember { mutableFloatStateOf(-1f) }
         val scope = rememberCoroutineScope()
         val game = remember(revision) { Prefs.gameFile() }
+        val saveSession = object : SaveGameSession {
+            override suspend fun closeForImport() {
+                Native.stop()
+                check(withTimeoutOrNull(30_000) { while (!Native.saveDataIdle()) delay(25); true } == true) {
+                    "The game did not finish closing. Saved progress has not been replaced. Try again from Home."
+                }
+            }
+            override fun restartAfterImport() {
+                SaveRestartActivity.restart(this@MainActivity)
+            }
+            override fun importFailed(message: String) { lastMessage = message }
+        }
         BackHandler(screen != "home" && busy.isEmpty()) { screen = "home" }
+        LaunchedEffect(Unit) {
+            if (intent.getBooleanExtra(EXTRA_SAVE_IMPORTED, false)) {
+                intent.removeExtra(EXTRA_SAVE_IMPORTED)
+                if (FileWork.recoveryError.isEmpty() && !File(Storage.root, ".save-restore").exists() && Prefs.gameFile() != null) {
+                    gameResult.launch(Intent(this@MainActivity, EmulationActivity::class.java)
+                        .putExtra(EmulationActivity.EXTRA_GAME, Prefs.gamePath))
+                } else lastMessage = if (FileWork.recoveryError.isNotEmpty()) FileWork.recoveryError
+                    else "Saved progress imported. Add your game, then choose Play game → Continue."
+            }
+        }
 
         suspend fun copyDocument(uri: Uri, directory: File, extensions: Set<String>, fixedName: String? = null): File = withContext(Dispatchers.IO) {
             val shown = contentResolver.query(uri, null, null, null, null)?.use { c ->
@@ -116,19 +143,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        Scaffold(containerColor = Mh4uColors.WindowBg, bottomBar = {
-            NavigationBar(containerColor = Mh4uColors.TitleBg) {
-                listOf(Triple("home", "Home", Icons.Rounded.Home), Triple("settings", "Settings", Icons.Rounded.Settings), Triple("about", "About", Icons.Rounded.Info)).forEach { (id, label, icon) ->
-                    NavigationBarItem(selected = screen == id, enabled = busy.isEmpty() && !FileWork.busy, onClick = { screen = id; settingsSection = "" }, icon = { Icon(icon, label) }, label = { Text(label) })
-                }
-            }
-        }) { insets ->
-            Column(Modifier.fillMaxSize().padding(insets)) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Image(painterResource(R.drawable.mh4_logo), "Monster Hunter 4 Ultimate logo", Modifier.width(64.dp).height(42.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column { Text("Monster Hunter 4", fontWeight = FontWeight.Bold, fontSize = 20.sp); Text("ROWELL", color = Mh4uColors.Amber, fontSize = 11.sp, letterSpacing = 3.sp) }
-                }
+        Scaffold(containerColor = Mh4uColors.WindowBg) { insets ->
+            Row(Modifier.fillMaxSize().padding(insets)) {
+                LauncherRail(screen, enabled = busy.isEmpty() && !FileWork.busy) { screen = it; settingsSection = "" }
+                Box(Modifier.weight(1f).fillMaxHeight()) {
                 if (busy.isNotEmpty()) {
                     Column(Modifier.padding(20.dp)) {
                         Text(busy); Spacer(Modifier.height(12.dp))
@@ -136,7 +154,7 @@ class MainActivity : ComponentActivity() {
                         else LinearProgressIndicator(Modifier.fillMaxWidth())
                     }
                 } else when (screen) {
-                    "settings" -> SettingsHub(initialSection = settingsSection, onPickGame = { pickGame.launch(arrayOf("*/*")) }, onPickLibrary = { pickLibrary.launch(arrayOf("*/*")) }, onPickUpdate = { pickUpdate.launch(arrayOf("*/*")) })
+                    "settings" -> SettingsHub(initialSection = settingsSection, onPickGame = { pickGame.launch(arrayOf("*/*")) }, onPickLibrary = { pickLibrary.launch(arrayOf("*/*")) }, onPickUpdate = { pickUpdate.launch(arrayOf("*/*")) }, saveSession = saveSession)
                     "about" -> AboutPage()
                     else -> HomePanel(game, lastMessage, onPlay = {
                         if (FileWork.busy) lastMessage = "Please wait for the file operation to finish."
@@ -148,34 +166,56 @@ class MainActivity : ComponentActivity() {
                         else { lastMessage = ""; gameResult.launch(Intent(this@MainActivity, EmulationActivity::class.java).putExtra(EmulationActivity.EXTRA_GAME, Prefs.gamePath)) }
                     }, onChoose = { pickGame.launch(arrayOf("*/*")) }, onTouch = { settingsSection = "touch"; screen = "settings" }, onDisplay = { settingsSection = "display"; screen = "settings" })
                 }
+                }
             }
         }
     }
 }
 
 @Composable private fun HomePanel(game: File?, message: String, onPlay: () -> Unit, onChoose: () -> Unit, onTouch: () -> Unit, onDisplay: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(bottom = 8.dp)) {
-        if (message.isNotEmpty()) { Notice(message, Modifier.heightIn(max = 70.dp).verticalScroll(rememberScrollState())); Spacer(Modifier.height(8.dp)) }
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Surface(Modifier.weight(1.1f).fillMaxHeight(), color = Mh4uColors.TitleBgActive, shape = RoundedCornerShape(24.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                        Image(painterResource(R.drawable.mh4_logo), null, Modifier.width(96.dp).height(64.dp))
-                        Spacer(Modifier.width(16.dp))
-                        Text("Monster Hunter\n4 Ultimate", fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    }
-                    if (game != null) Text(game.name, color = Mh4uColors.TextDisabled, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = onPlay, enabled = !FileWork.busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp)) {
-                        Icon(if (game != null) Icons.Rounded.PlayArrow else Icons.Rounded.Add, null); Spacer(Modifier.width(8.dp)); Text(if (game != null) "Play game" else "Add game", fontSize = 17.sp)
-                    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 520.dp
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (message.isNotEmpty()) Notice(message)
+            Surface(Modifier.fillMaxWidth(), color = Mh4uColors.TitleBgActive, shape = RoundedCornerShape(16.dp)) {
+                if (wide) Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f)) { HomeGameSummary(game, onChoose) }
+                    HomePlayButton(game, onPlay)
+                } else Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeGameSummary(game, onChoose)
+                    HomePlayButton(game, onPlay, Modifier.fillMaxWidth())
                 }
             }
-            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (wide) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) { ActionTile("Touch controls", "Arrange buttons and add combos", Icons.Rounded.SportsEsports, onTouch) }
+                    Box(Modifier.weight(1f)) { ActionTile("Display & performance", "Screen layout and picture quality", Icons.Rounded.Tune, onDisplay) }
+                }
+            } else {
                 ActionTile("Touch controls", "Arrange buttons and add combos", Icons.Rounded.SportsEsports, onTouch)
-                ActionTile("Display & performance", "Fullscreen and picture quality", Icons.Rounded.Tune, onDisplay)
-                if (game != null) TextButton(onClick = onChoose) { Icon(Icons.Rounded.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose another game") }
+                ActionTile("Display & performance", "Screen layout and picture quality", Icons.Rounded.Tune, onDisplay)
             }
         }
+    }
+}
+
+@Composable private fun HomeGameSummary(game: File?, onChoose: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Image(painterResource(R.drawable.mh4_logo), "Monster Hunter 4 Ultimate logo", Modifier.size(56.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Monster Hunter 4 Ultimate", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(game?.name ?: "Choose your decrypted game image to get started.", color = Mh4uColors.TextDisabled, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (game != null) TextButton(enabled = !FileWork.busy, onClick = onChoose, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                Icon(Icons.Rounded.FolderOpen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Change game", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable private fun HomePlayButton(game: File?, onPlay: () -> Unit, modifier: Modifier = Modifier) {
+    Button(onClick = onPlay, enabled = !FileWork.busy, modifier = modifier.heightIn(min = 48.dp).widthIn(min = 120.dp), shape = RoundedCornerShape(12.dp)) {
+        Icon(if (game != null) Icons.Rounded.PlayArrow else Icons.Rounded.Add, null)
+        Spacer(Modifier.width(8.dp))
+        Text(if (game != null) "Play game" else "Add game", fontSize = 15.sp)
     }
 }

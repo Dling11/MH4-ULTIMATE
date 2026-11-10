@@ -6,6 +6,23 @@ import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 
 class LayoutPersistenceTest {
+    @Test fun addingHideShowPreservesAllOldPositionsAndTheSecondScreenButton() {
+        val original = sample().ensureUtilityButtons(false)
+        original.controls.removeAll { it.kind == Control.Kind.SCREEN_VISIBILITY }
+        original.controls.first { it.kind == Control.Kind.SCREEN }.apply { x = .38f; y = .14f; size = .09f }
+        original.addCombo("R+X+A", 37, false).apply { x = .71f; y = .32f }
+        val file = folder.newFile("before-hide-show.json")
+        original.saveTo(file)
+        val bytes = file.readBytes()
+        val loaded = OverlayLayout.loadFrom(file).ensureUtilityButtons(false).ensureUtilityButtons(false)
+        assertEquals(original.controls, loaded.controls.filter { it.kind != Control.Kind.SCREEN_VISIBILITY })
+        assertEquals(1, loaded.controls.count { it.kind == Control.Kind.SCREEN_VISIBILITY })
+        assertArrayEquals(bytes, file.readBytes())
+        loaded.controls.first { it.kind == Control.Kind.SCREEN_VISIBILITY }.apply { x = .57f; y = .12f; size = .08f }
+        loaded.saveTo(file)
+        assertEquals(loaded.controls, OverlayLayout.loadFrom(file).ensureUtilityButtons(false).controls)
+    }
+
     @Test fun addingSpeedPreservesExistingControlsAndDoesNotRewriteTheFile() {
         val file = folder.newFile("old-layout.json")
         val original = sample()

@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 fun SectionTitle(text: String) {
     Text(
         text, color = Mh4uColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-        modifier = Modifier.padding(start = 4.dp, top = 18.dp, bottom = 6.dp),
+        modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 4.dp),
     )
 }
 
@@ -28,7 +28,7 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
     Surface(
         modifier = modifier.fillMaxWidth(), color = Mh4uColors.PopupBg, contentColor = Mh4uColors.Text,
         shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Mh4uColors.Border),
-    ) { Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), content = content) }
+    ) { Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), content = content) }
 }
 
 @Composable
@@ -87,11 +87,11 @@ fun Tabs(titles: List<String>, selected: Int, onSelect: (Int) -> Unit) {
 // ── one setting per row, written to the ini as soon as it changes ──
 
 @Composable
-fun ChoiceRow(title: String, hint: String?, options: List<Pair<String, String>>, value: String, onChange: (String) -> Unit) {
+fun ChoiceRow(title: String, hint: String?, options: List<Pair<String, String>>, value: String, enabled: Boolean = true, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val label = options.firstOrNull { it.second == value }?.first ?: value
     Row(
-        Modifier.fillMaxWidth().clickable { open = true }.padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(enabled = enabled) { open = true }.padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -102,6 +102,7 @@ fun ChoiceRow(title: String, hint: String?, options: List<Pair<String, String>>,
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Mh4uColors.PopupBg) {
             options.forEach { (name, v) ->
                 DropdownMenuItem(
+                    enabled = enabled,
                     text = { Text(name, color = if (v == value) Mh4uColors.Amber else Mh4uColors.Text) },
                     onClick = { onChange(v); open = false },
                 )
@@ -111,9 +112,9 @@ fun ChoiceRow(title: String, hint: String?, options: List<Pair<String, String>>,
 }
 
 @Composable
-fun ToggleRow(title: String, hint: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(title: String, hint: String?, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable(enabled = enabled) { onChange(!checked) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -121,6 +122,7 @@ fun ToggleRow(title: String, hint: String?, checked: Boolean, onChange: (Boolean
             if (hint != null) Hint(hint)
         }
         Switch(
+            enabled = enabled,
             checked = checked, onCheckedChange = onChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Mh4uColors.AmberBright, checkedTrackColor = Mh4uColors.TabSelected,
@@ -134,7 +136,7 @@ fun ToggleRow(title: String, hint: String?, checked: Boolean, onChange: (Boolean
 @Composable
 fun SliderRow(
     title: String, hint: String?, value: Float, range: ClosedFloatingPointRange<Float>, unit: String = "",
-    steps: Int = 0, onChange: (Float) -> Unit,
+    steps: Int = 0, enabled: Boolean = true, onChange: (Float) -> Unit,
 ) {
     var local by remember(value) { mutableFloatStateOf(value) }
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -146,6 +148,7 @@ fun SliderRow(
             )
         }
         Slider(
+            enabled = enabled,
             value = local, onValueChange = { local = it }, onValueChangeFinished = { onChange(local) },
             valueRange = range, steps = steps,
             colors = SliderDefaults.colors(

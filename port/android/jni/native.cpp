@@ -6,11 +6,13 @@
 // keyboard and the thread the game runs on.
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
+#include <stdexcept>
 
 #include <android/native_window_jni.h>
 #include <jni.h>
@@ -44,6 +46,7 @@
 #include "network/room_member.h"
 #include "pad_device.h"
 #include "speed_control.h"
+#include "save_read_queue.h"
 #include "video_core/gpu.h"
 #include "video_core/renderer_base.h"
 
@@ -73,6 +76,7 @@ std::atomic<bool> g_pause{false};
 std::mutex g_run_mutex;  // one game at a time
 std::mutex g_pause_mutex;
 std::condition_variable g_pause_cv;
+Mh4uAndroid::SaveReadQueue g_save_reads;
 
 std::mutex g_task_mutex;
 std::queue<std::function<void()>> g_tasks;  // for the emulation thread, once per loop
@@ -175,6 +179,17 @@ void ApplyScreenExtras(const std::string& text) {
     }
 }
 
+/// Screen geometry only. Shared by full settings and the lightweight screen controls.
+void ApplyScreenStyle(const std::string& style) {
+    auto& v = Settings::values;
+    v.layout_option = style == "single" ? Settings::LayoutOption::SingleScreen
+        : style == "stacked" ? Settings::LayoutOption::Default
+        : style == "side" ? Settings::LayoutOption::SideScreen
+        : style == "large" ? Settings::LayoutOption::LargeScreen
+        : style == "hybrid" ? Settings::LayoutOption::HybridScreen
+        : Settings::LayoutOption::CustomLayout;
+}
+
 /// The app's settings (mh4u-app.ini) as Azahar's, then what is Android's own. PC's Apply() does
 /// the common part (renderer, filter, clock, sound level, the input profile).
 void ApplyConfig(const App::Config& config) {
@@ -186,20 +201,15 @@ void ApplyConfig(const App::Config& config) {
     // this Azahar counts the internal resolution in percent (100: native); the app's ini in
     // multiples of the 3DS's, 0 meaning from the screen
     v.resolution_factor = static_cast<u32>(config.resolution * 100);
-    // layouts the PC app doesn't have (Azahar's own names)
-    if (config.screens == "large") {
-        v.layout_option = Settings::LayoutOption::LargeScreen;
-    } else if (config.screens == "hybrid") {
-        v.layout_option = Settings::LayoutOption::HybridScreen;
-    } else if (config.screens == "windows") {
-        v.layout_option = Settings::LayoutOption::CustomLayout;  // no second window on a phone
-    }
+    ApplyScreenStyle(config.screens);
     ApplySpeed();
 }
 
 // ── the game thread ──
 Core::System::ResultStatus Run(const std::string& game, std::string& message) {
     std::scoped_lock run_lock(g_run_mutex);
+    g_save_reads.Open();
+    SCOPE_EXIT({ g_save_reads.Close(); });
     auto& system = Core::System::GetInstance();
 
     // A new run starts "not stopped": g_stop begins true, so without this the wait below
@@ -271,6 +281,7 @@ Core::System::ResultStatus Run(const std::string& game, std::string& message) {
     });
 
     while (!g_stop) {
+        g_save_reads.RunPending(!g_stop);
         RunTasks();
         App::Multiplayer::Tick();
         ApplySpeed();
@@ -279,7 +290,12 @@ Core::System::ResultStatus Run(const std::string& game, std::string& message) {
             SCOPE_EXIT({ Settings::values.volume = volume; });
             Settings::values.volume = 0;
             std::unique_lock lock(g_pause_mutex);
-            g_pause_cv.wait(lock, [] { return !g_pause || g_stop; });
+            while (g_pause && !g_stop) {
+                g_pause_cv.wait(lock, [] { return !g_pause || g_stop || g_save_reads.HasPending(); });
+                lock.unlock();
+                g_save_reads.RunPending(!g_stop);
+                lock.lock();
+            }
             continue;
         }
         const auto result = system.RunLoop();
@@ -457,6 +473,40 @@ FN(jboolean, saveDataIdle) {
     return true;
 }
 
+// Only for copying already-saved files. Restore/import MUST stop the core first.
+FN(jboolean, withSavedFiles, jobject callback) {
+    if (!callback) return false;
+    jobject held = env->NewGlobalRef(callback);
+    if (!held) return false;
+    SCOPE_EXIT({ env->DeleteGlobalRef(held); });
+    jmethodID run = env->GetMethodID(env->GetObjectClass(held), "run", "()V");
+    if (!run) return false;
+    auto read = [held, run] {
+        if (std::fflush(nullptr) != 0) throw std::runtime_error("Could not flush saved files.");
+        JNIEnv* current = Mh4uAndroid::Env();
+        current->CallVoidMethod(held, run);
+        if (current->ExceptionCheck()) {
+            current->ExceptionClear();
+            throw std::runtime_error("Could not copy saved files.");
+        }
+    };
+    try {
+        std::unique_lock closed(g_run_mutex, std::try_to_lock);
+        if (closed.owns_lock()) { read(); return true; }
+        std::future<bool> result;
+        {
+            // The same mutex as the paused wait prevents a missed wakeup.
+            std::scoped_lock paused(g_pause_mutex);
+            result = g_save_reads.Submit(read);
+        }
+        g_pause_cv.notify_all();
+        return result.get();
+    } catch (const std::exception& error) {
+        LOG_WARNING(Frontend, "Saved-file copy did not complete: {}", error.what());
+        return false;
+    }
+}
+
 FN(void, touch, jint x, jint y, jboolean down) {
     if (g_window) {
         g_window->OnTouch(x, y, down);
@@ -515,6 +565,23 @@ FN(void, applySettings, jstring extras) {
     if (g_stop) {
         RunTasks();
     }
+}
+
+/// Layout-only changes follow the same queue/window refresh as 2nd-screen focus.
+/// System::ApplySettings recreates the audio sink, so it must not run on this path.
+FN(void, applyScreenLayout, jstring extras) {
+    const std::string extra_text = Str(env, extras);
+    Post([extra_text] {
+        g_config.screens = App::Load().screens;
+        ApplyScreenStyle(g_config.screens);
+        ApplyScreenExtras(extra_text);
+        std::scoped_lock lock(surface_mutex);
+        if (g_window) {
+            g_window->SetScreenStyle(g_config.screens);
+            g_window->RefreshLayout();
+            LOG_INFO(Frontend, "screen layout refreshed without audio reset: {}", g_config.screens);
+        }
+    });
 }
 
 FN(void, setSecondScreenExpanded, jboolean expanded) {

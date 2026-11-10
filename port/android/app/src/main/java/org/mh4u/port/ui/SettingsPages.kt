@@ -3,6 +3,8 @@ package org.mh4u.port.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -24,59 +26,77 @@ private fun Page(content: @Composable ColumnScope.() -> Unit) {
 
 /** A game option (mh4u.ini). */
 @Composable
-private fun GameChoice(title: String, key: String, default: String, options: List<Pair<String, String>>, hint: String? = null) {
+private fun GameChoice(title: String, key: String, default: String, options: List<Pair<String, String>>, hint: String? = null, enabled: Boolean = true) {
     var v by remember { mutableStateOf(Prefs.getGame(key, default)) }
-    ChoiceRow(title, hint, options, v) { v = it; Prefs.setGame(key, it) }
+    ChoiceRow(title, hint, options, v, enabled = enabled) { v = it; Prefs.setGame(key, it) }
 }
 
 @Composable
-private fun GameToggle(title: String, key: String, default: Boolean, hint: String? = null, on: String = "on", off: String = "off") {
+private fun GameToggle(title: String, key: String, default: Boolean, hint: String? = null, on: String = "on", off: String = "off", enabled: Boolean = true) {
     var v by remember { mutableStateOf(Prefs.getGame(key, if (default) on else off) == on) }
-    ToggleRow(title, hint, v) { v = it; Prefs.setGame(key, if (it) on else off) }
+    ToggleRow(title, hint, v, enabled = enabled) { v = it; Prefs.setGame(key, if (it) on else off) }
 }
 
 private val ON_OFF = listOf("On" to "on", "Off" to "off")
 
 @Composable
-fun GamePage() = Page {
-    SectionTitle("Speed")
+@OptIn(ExperimentalLayoutApi::class)
+fun FrameRateSettings(recompiledAvailable: Boolean) {
+    var fps by remember { mutableStateOf(Prefs.getGame("fps", "60").toFloatOrNull() ?: 60f) }
+    SectionTitle("Frame rate cap")
     Panel {
-        var fps by remember { mutableStateOf(Prefs.getGame("fps", "60").toFloatOrNull() ?: 60f) }
-        SliderRow("Frame rate cap", "The game runs at 30 on a 3DS; its speed stays right at any rate. Above 60 a busy scene may need a higher CPU clock.",
-            fps, 30f..120f, " fps", steps = 17) { fps = it; Prefs.setGame("fps", it.toInt().toString()) }
-        RowDivider()
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (preset in listOf(30, 60, 90, 120)) {
+                FilterChip(selected = fps == preset.toFloat(), enabled = recompiledAvailable,
+                    onClick = { fps = preset.toFloat(); Prefs.setGame("fps", preset.toString()) },
+                    label = { Text(if (preset == 60) "60 FPS · Default" else "$preset FPS") })
+            }
+        }
+        if (fps.isFinite() && fps !in listOf(30f, 60f, 90f, 120f)) Hint("Saved cap: $fps FPS. Choose a preset to replace it.")
+        Hint(if (recompiledAvailable) "60 FPS is the default. Changes apply while playing; no restart needed. Actual FPS depends on the scene and device."
+            else "Requires compatible recompiled mode. Normal emulation keeps the game's own frame rate.")
+    }
+}
+
+@Composable
+fun GamePage(recompiledAvailable: Boolean, inGame: Boolean) = Page {
+    FrameRateSettings(recompiledAvailable)
+    SectionTitle("Emulated CPU")
+    Panel {
         var clock by remember { mutableStateOf(Prefs.getInt("Game", "cpu_clock", 100).toFloat()) }
-        SliderRow("CPU clock", "Applies the next time the game starts.", clock, 50f..400f, " %", steps = 6) {
+        SliderRow("CPU clock", "100% is the default. Higher values need more processing power. " +
+            if (inGame) "Tap Resume to apply." else "Applies when you start the game.", clock, 50f..400f, " %", steps = 6) {
             clock = it; Prefs.setApp("Game", "cpu_clock", it.toInt().toString())
         }
-        RowDivider()
-        GameToggle("Online sync (net_sync)", "net_sync", true, "Keeps players of a room in step.")
     }
 
-    SectionTitle("Picture")
+    SectionTitle("Recompiled game features")
+    if (!recompiledAvailable) Notice("These game-specific options need a matching code library and game update. CPU clock and standard graphics settings remain available.")
+    Panel { GameToggle("Online sync", "net_sync", true, "Keeps players using recompiled mode in step.", enabled = recompiledAvailable) }
+    SectionTitle("Game picture")
     Panel {
         GameChoice("Top screen shape", "widescreen", "16:9",
-            listOf("16:9", "16:10", "21:9", "32:9", "4:3", "Off").map { it to it.lowercase() })
+            listOf("16:9", "16:10", "21:9", "32:9", "4:3", "Off").map { it to it.lowercase() }, enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Draw the wide picture itself", "wide_render", true, "Off stretches a 400×240 one.", "1", "0")
+        GameToggle("Draw the wide picture itself", "wide_render", true, "Off stretches a 400×240 one.", "1", "0", enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("HUD to the screen's edges", "hud_edges", true, "Moves health, stamina and the party list out to the sides.", "1", "0")
+        GameToggle("HUD to the screen's edges", "hud_edges", true, "Moves health, stamina and the party list out to the sides.", "1", "0", enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Dither", "dither", false, "Off for a clean picture above 1× resolution.")
+        GameToggle("Dither", "dither", false, "Off for a clean picture above 1× resolution.", enabled = recompiledAvailable)
         RowDivider()
-        GameChoice("Stereoscopic 3D", "stereo_3d", "off", listOf("Off" to "off", "On" to "on"))
+        GameChoice("Stereoscopic 3D", "stereo_3d", "off", listOf("Off" to "off", "On" to "on"), enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Antialiasing", "antialiasing", true)
+        GameToggle("Antialiasing", "antialiasing", true, enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Bloom", "bloom", false)
+        GameToggle("Bloom", "bloom", false, enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Depth of field", "depth_of_field", false)
+        GameToggle("Depth of field", "depth_of_field", false, enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Motion blur", "motion_blur", true)
+        GameToggle("Motion blur", "motion_blur", true, enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Radial blur", "radial_blur", true)
+        GameToggle("Radial blur", "radial_blur", true, enabled = recompiledAvailable)
         RowDivider()
-        GameToggle("Haze", "haze", true)
+        GameToggle("Haze", "haze", true, enabled = recompiledAvailable)
     }
 
     SectionTitle("Touch screen over the game")
@@ -84,20 +104,20 @@ fun GamePage() = Page {
 
     SectionTitle("Quest buttons")
     Panel {
-        GameChoice("Kick", "kick", "ZR", PAD_BUTTONS, "The touch screen's kick panel, on a button.")
+        GameChoice("Kick", "kick", "ZR", PAD_BUTTONS, "The touch screen's kick panel, on a button.", enabled = recompiledAvailable)
         RowDivider()
-        GameChoice("Target camera", "target", "ZL", PAD_BUTTONS)
+        GameChoice("Target camera", "target", "ZL", PAD_BUTTONS, enabled = recompiledAvailable)
         RowDivider()
-        GameChoice("Skip", "skip", "ZR", PAD_BUTTONS, "Skips the scene of the monster's end.")
+        GameChoice("Skip", "skip", "ZR", PAD_BUTTONS, "Skips the scene of the monster's end.", enabled = recompiledAvailable)
         RowDivider()
         GameChoice("End the wait (hold)", "skip_end", "ZL+ZR",
             listOf("ZL + ZR" to "ZL+ZR", "L + R" to "L+R", "START + SELECT" to "START+SELECT"),
-            "Held together to end the carving wait, as if it ran out.")
+            "Held together to end the carving wait, as if it ran out.", enabled = recompiledAvailable)
         RowDivider()
         var hold by remember { mutableStateOf(Prefs.getGame("skip_end_hold", "1.0").toFloatOrNull() ?: 1f) }
-        SliderRow("Hold time", null, hold, 0.5f..3f, " s", steps = 4) { hold = it; Prefs.setGame("skip_end_hold", "%.1f".format(it)) }
+        SliderRow("Hold time", null, hold, 0.5f..3f, " s", steps = 4, enabled = recompiledAvailable) { hold = it; Prefs.setGame("skip_end_hold", "%.1f".format(it)) }
         RowDivider()
-        GameChoice("Skip hint on screen", "skip_hint", "on", listOf("On" to "on", "Flash" to "flash", "Off" to "off"))
+        GameChoice("Skip hint on screen", "skip_hint", "on", listOf("On" to "on", "Flash" to "flash", "Off" to "off"), enabled = recompiledAvailable)
     }
     Spacer(Modifier.height(24.dp))
 }

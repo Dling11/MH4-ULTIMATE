@@ -30,6 +30,7 @@ PY
     -keyalg RSA -keysize 3072 -validity 10000 -dname 'CN=MH4U Rowell'
 fi
 sh /workspace/scripts/prepare-native.sh
+python3 /workspace/tools/check_android_compatibility.py
 if [ "${1:-}" = '--prepare-only' ]; then exit 0; fi
 sh /workspace/scripts/test-android-layout.sh
 export CMAKE_BUILD_PARALLEL_LEVEL=2

@@ -30,6 +30,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.mh4u.port.saves.SaveGameSession
 import org.mh4u.port.overlay.*
 import org.mh4u.port.ui.*
 
@@ -44,6 +48,28 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var layoutPortrait = false
     private var secondScreenExpanded by mutableStateOf(false)
     private var undoAvailable by mutableStateOf(false)
+    private var holdingForSaveImport = false
+    private val playbackState = GamePlaybackState()
+    private val saveSession = object : SaveGameSession {
+        override suspend fun closeForImport() {
+            withContext(Dispatchers.Main.immediate) {
+                holdingForSaveImport = true
+                Native.stop()
+            }
+            check(withTimeoutOrNull(30_000) { while (!Native.saveDataIdle()) delay(25); true } == true) {
+                "The game did not finish closing. Saved progress has not been replaced. Try again from Home."
+            }
+        }
+        override fun restartAfterImport() {
+            SaveRestartActivity.restart(this@EmulationActivity)
+        }
+        override fun importFailed(message: String) {
+            if (holdingForSaveImport) {
+                setResult(RESULT_OK, android.content.Intent().putExtra(EXTRA_MESSAGE, message))
+                finish()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +105,7 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
             }
             onSelect = { c -> this@EmulationActivity.selected = c }
             onSecondScreen = { focusSecondScreen(!secondScreenExpanded) }
+            onScreenVisibility = { toggleSmallScreen() }
             onEditCheckpoint = { editSession?.checkpoint() }
             onEditChanged = { undoAvailable = editSession?.canUndo == true }
         }
@@ -97,10 +124,11 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
             if (event.keyCode == KeyEvent.KEYCODE_BUTTON_MODE && event.action == KeyEvent.ACTION_DOWN && !menuOpen) { openMenu(); true }
             else ((!menuOpen && !editing) || MH4UInput.learning()) && MH4UInput.onKey(event)
         }, onMotion = { event -> ((!menuOpen && !editing) || MH4UInput.learning()) && MH4UInput.onMotion(event) })
+        Prefs.beginGameSession()
         gameThread = Thread({
             val message = Native.run(game)
             runOnUiThread {
-                if (!isFinishing) { setResult(RESULT_OK, android.content.Intent().putExtra(EXTRA_MESSAGE, message)); finish() }
+                if (!isFinishing && !holdingForSaveImport) { setResult(RESULT_OK, android.content.Intent().putExtra(EXTRA_MESSAGE, message)); finish() }
             }
         }, "mh4u-game").also { it.start() }
     }
@@ -118,6 +146,7 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun applyOverlayPrefs() {
         if (editing) return
+        overlay.smallScreenHidden = Prefs.smallScreenHidden()
         overlay.layout = OverlayLayout.load(layoutPortrait)
         val pad = InputDevice.getDeviceIds().any { id -> InputDevice.getDevice(id)?.let { d -> d.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD && !d.isVirtual } == true }
         overlay.controlsVisible = Prefs.getBool("Android", "overlay", true) && !(Prefs.getBool("Android", "overlay_autohide", false) && pad)
@@ -128,24 +157,37 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
         focusSecondScreen(false)
         if (editing && !finishEditing(true, false)) return
         menuOpen = true; overlay.shown = false; MH4UInput.releaseAll()
-        if (!inRoom()) Native.setPaused(true)
+        syncPlaybackState()
     }
     private fun closeMenu() {
         if (FileWork.busy) return
         menuOpen = false; overlay.shown = true; applyOverlayPrefs(); applyWindowMode(); Prefs.apply()
         ViewCompat.requestApplyInsets(overlay.parent as android.view.View)
-        Native.setPaused(false)
+        syncPlaybackState()
     }
     private fun startEditing() {
         focusSecondScreen(false)
+        MH4UInput.releaseAll()
         editSession = LayoutEditSession(overlay.layout)
         undoAvailable = false
         overlay.layout = editSession!!.draft
         overlay.selected = null; overlay.shown = true; overlay.controlsVisible = true
         overlay.editing = true; menuOpen = false; editing = true
+        syncPlaybackState()
+    }
+
+    private fun syncPlaybackState() {
+        Native.setPaused(playbackState.shouldPause(inRoom()))
+    }
+
+    private fun toggleSmallScreen() {
+        focusSecondScreen(false)
+        Prefs.toggleSmallScreen()
+        overlay.smallScreenHidden = Prefs.smallScreenHidden()
     }
 
     private fun focusSecondScreen(expanded: Boolean) {
+        if (secondScreenExpanded == expanded) return
         secondScreenExpanded = expanded
         if (::overlay.isInitialized) overlay.secondScreenExpanded = expanded
         if (Native.isRunning()) Native.setSecondScreenExpanded(expanded)
@@ -160,7 +202,7 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
         } else overlay.layout = session.cancel()
         overlay.editing = false; overlay.selected = null; editing = false; editSession = null
         overlay.invalidate()
-        if (resume) closeMenu() else applyOverlayPrefs()
+        if (resume) closeMenu() else { applyOverlayPrefs(); syncPlaybackState() }
         return true
     }
 
@@ -177,9 +219,18 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
             val message = Native.notice()
             if (!message.contains("code library isn't installed")) notice = message
         }
-        LaunchedEffect(counter) {
-            if (counter) while (true) {
-                val p = Native.perf(); if (p.size == 2) fps = "%.0f FPS · %.0f%%".format(p[0], p[1]); delay(1000)
+        LaunchedEffect(counter, menuOpen, editing) {
+            fps = ""
+            if (counter && !menuOpen && !editing) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                fps = ""
+                while (!Native.isRunning()) delay(50)
+                // Discard the interval containing time spent paused, then measure a full live second.
+                Native.perf()
+                while (true) {
+                    delay(1000)
+                    val p = Native.perf()
+                    if (p.size == 2) fps = "%.0f FPS · %.0f%%".format(p[0], p[1])
+                }
             }
         }
         LaunchedEffect(Unit) {
@@ -211,17 +262,9 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     @Composable private fun GameMenu() {
         var quit by remember { mutableStateOf(false) }
-        Surface(Modifier.fillMaxSize(), color = Mh4uColors.WindowBg.copy(alpha = .98f), contentColor = Mh4uColors.Text) {
-            Column(Modifier.safeDrawingPadding()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Game menu", color = Mh4uColors.Text, fontSize = 20.sp, modifier = Modifier.weight(1f))
-                    TextButton(enabled = !FileWork.busy, onClick = { closeMenu(); focusSecondScreen(true) }) { Text("Enlarge 2nd screen") }
-                    TextButton(enabled = !FileWork.busy, onClick = { quit = true }) { Icon(Icons.AutoMirrored.Rounded.ExitToApp, null); Spacer(Modifier.width(6.dp)); Text("Exit game") }
-                    Spacer(Modifier.width(12.dp))
-                    Button(enabled = !FileWork.busy, onClick = { closeMenu() }) { Icon(Icons.Rounded.PlayArrow, null); Text("Resume") }
-                }
-                Box(Modifier.weight(1f)) { SettingsHub(onEditOverlay = { startEditing() }, onOverlayChanged = { applyOverlayPrefs() }) }
-            }
+        GameSettingsPanel(enabled = !FileWork.busy, onResume = { closeMenu() },
+            onSecondScreen = { closeMenu(); focusSecondScreen(true) }, onExit = { quit = true }) {
+            SettingsHub(onEditOverlay = { startEditing() }, onOverlayChanged = { applyOverlayPrefs() }, saveSession = saveSession, showRootTitle = false)
         }
         if (quit) AlertDialog(onDismissRequest = { quit = false }, title = { Text("Exit this game?") }, text = { Text("Make sure you saved your progress inside Monster Hunter.") }, confirmButton = { TextButton(onClick = { quit = false; Native.stop() }) { Text("Exit game") } }, dismissButton = { TextButton(onClick = { quit = false }) { Text("Keep playing") } })
     }
@@ -235,19 +278,20 @@ class EmulationActivity : ComponentActivity(), SurfaceHolder.Callback {
         super.onConfigurationChanged(newConfig)
         layoutPortrait = isPortrait()
         if (::overlay.isInitialized) applyOverlayPrefs()
-        Prefs.apply()
+        Prefs.apply(force = true)
     }
     override fun onPause() {
+        playbackState.onPause()
         if (::overlay.isInitialized) {
             focusSecondScreen(false)
             Native.setSpeed(100)
             if (editing) finishEditing(true, false)
             MH4UInput.releaseAll(); overlay.releaseEverything()
         }
-        if (!inRoom()) Native.setPaused(true)
+        syncPlaybackState()
         super.onPause()
     }
-    override fun onResume() { super.onResume(); Native.setPaused((menuOpen || editing) && !inRoom()) }
+    override fun onResume() { super.onResume(); playbackState.onResume(); syncPlaybackState() }
     override fun onDestroy() {
         if (editing) finishEditing(true, false)
         if (Keyboard.host === this) Keyboard.host = null

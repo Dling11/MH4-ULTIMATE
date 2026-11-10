@@ -9,6 +9,8 @@ import java.io.File
  * the PC app ignores.
  */
 object Prefs {
+    private val applyGate = SettingsApplyGate()
+    fun beginGameSession() = applyGate.reset()
     fun ensureRowellDefaults() {
         val defaults = listOf(Triple("Android", "orientation", "landscape"), Triple("Display", "screens", "overlay"))
         for ((section, key, value) in defaults) if (app.read(section, key) == null) setApp(section, key, value)
@@ -32,6 +34,18 @@ object Prefs {
         getApp(section, key, if (default) "on" else "off").lowercase() in setOf("on", "1", "yes", "true")
     fun setBool(section: String, key: String, v: Boolean) = setApp(section, key, if (v) "on" else "off")
 
+    private fun screenChoice() = ScreenChoice(getApp("Display", "screens", "overlay"), getBool("Android", "swap", false))
+    fun smallScreenHidden() = SmallScreenVisibility.hidden(screenChoice())
+    fun toggleSmallScreen() {
+        val change = SmallScreenVisibility.toggle(screenChoice(), ScreenChoice(
+            getApp("Android", "screen_before_hide", "overlay"), getBool("Android", "swap_before_hide", false)))
+        setApp("Android", "screen_before_hide", change.previous.layout)
+        setBool("Android", "swap_before_hide", change.previous.swapped)
+        setApp("Display", "screens", change.display.layout)
+        setBool("Android", "swap", change.display.swapped)
+        apply()
+    }
+
     /** The screen options the native side wants besides mh4u-app.ini (see native.cpp). */
     fun screenExtras(): String = buildString {
         append("swap=").append(if (getBool("Android", "swap", false)) 1 else 0).append('\n')
@@ -42,7 +56,14 @@ object Prefs {
     }
 
     /** Writes the settings into the running game (or just before it starts). */
-    fun apply() { if (Native.isRunning()) Native.applySettings(screenExtras()) }
+    fun apply(force: Boolean = false) {
+        if (!Native.isRunning()) { applyGate.reset(); return }
+        val extras = screenExtras()
+        val ini = File(Storage.root, "mh4u-app.ini").takeIf { it.exists() }?.readText().orEmpty()
+        val snapshot = SettingsApplyGate.snapshot(ini, extras, getGame("touch_overlay", "top-right 25 85"))
+        applyGate.apply(snapshot, force, coreSnapshot = SettingsApplyGate.coreSnapshot(ini),
+            layoutAction = { Native.applyScreenLayout(extras) }) { Native.applySettings(extras) }
+    }
 
     // the game and the code library, as the player set them up
     var gamePath: String

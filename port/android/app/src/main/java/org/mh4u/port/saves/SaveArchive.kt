@@ -30,6 +30,14 @@ class SaveArchive(private val root: File, private val now: () -> Long = System::
         private const val MAX_TOTAL = 256L * 1024 * 1024
         private const val BASE = "sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000"
         val SCOPES = linkedMapOf("save" to "$BASE/title/00040000/00126300/data", "extra" to "$BASE/extdata/00000000/00001263")
+        /** Standard Azahar layout and the shorter layout Native0.1.8 can discover with its depth-limited scan. */
+        fun transferPaths(entry: String): List<String> {
+            check(validPath(entry)) { "Unsupported save archive path." }
+            val scope = entry.substringBefore('/')
+            val tail = entry.substringAfter('/')
+            val compact = if (scope == "save") "00040000/00126300/data/$tail" else "extdata/00000000/00001263/$tail"
+            return listOf("${SCOPES.getValue(scope)}/$tail", compact)
+        }
         private val managedName = Regex("backup-[0-9]+-[a-f0-9-]{36}\\.zip")
         private fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         private fun validPath(path: String): Boolean = path.length <= 512 && '/' in path && '\\' !in path && ':' !in path &&
@@ -140,9 +148,9 @@ class SaveArchive(private val root: File, private val now: () -> Long = System::
 
     private fun inspect(archive: File, verify: Boolean, extract: File? = null): Contents = ZipFile(archive).use { zip ->
         val entries = zip.entries().asSequence().take(MAX_FILES + 2).toList()
-        check(entries.size in 2..MAX_FILES + 1 && entries.none { it.isDirectory }) { "Choose an MH4U - Rowell save ZIP." }
+        check(entries.size in 2..MAX_FILES + 1 && entries.none { it.isDirectory }) { "Choose a backup ZIP exported by this app. For another app's save, choose From another MH4U app." }
         check(entries.map { it.name.lowercase() }.toSet().size == entries.size) { "The archive contains duplicate files." }
-        val manifestEntry = zip.getEntry("manifest.json") ?: error("Choose an MH4U - Rowell save ZIP.")
+        val manifestEntry = zip.getEntry("manifest.json") ?: error("Choose a backup ZIP exported by this app. For another app's save, choose From another MH4U app.")
         val manifestBytes = zip.getInputStream(manifestEntry).use { bounded(it, 1024 * 1024) }
         check(manifestBytes.size <= 1024 * 1024) { "The backup manifest is too large." }
         val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))

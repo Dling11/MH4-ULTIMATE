@@ -2,6 +2,9 @@ package org.mh4u.port.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -17,18 +20,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.mh4u.port.*
 import org.mh4u.port.overlay.OverlayLayout
+import org.mh4u.port.saves.SaveGameSession
 import java.io.File
 
 @Composable fun ActionTile(title: String, description: String, icon: ImageVector, onClick: () -> Unit) {
     Surface(onClick = onClick, shape = RoundedCornerShape(16.dp), color = Mh4uColors.PopupBg, contentColor = Mh4uColors.Text, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = Mh4uColors.Amber, modifier = Modifier.size(26.dp))
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) { Text(title, color = Mh4uColors.Text, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(3.dp)); Hint(description) }
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = Mh4uColors.Amber, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) { Text(title, color = Mh4uColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(3.dp)); Hint(description) }
             Icon(Icons.Rounded.ChevronRight, null, tint = Mh4uColors.TextDisabled)
         }
     }
@@ -37,28 +42,30 @@ import java.io.File
 @Composable fun SettingsHub(
     initialSection: String = "", onEditOverlay: (() -> Unit)? = null, onOverlayChanged: () -> Unit = {},
     onPickGame: (() -> Unit)? = null, onPickLibrary: (() -> Unit)? = null, onPickUpdate: (() -> Unit)? = null,
+    saveSession: SaveGameSession? = null,
+    showRootTitle: Boolean = true,
 ) {
     var section by rememberSaveable(initialSection) { mutableStateOf(initialSection) }
-    val titles = mapOf("display" to "Display & performance", "touch" to "Touch controls", "layouts" to "Saved control layouts", "saves" to "Saves", "reports" to "Help & reports", "controller" to "Controller & keyboard", "audio" to "Audio", "online" to "Multiplayer", "files" to "Game & storage", "advanced" to "Advanced", "graphics" to "Advanced graphics", "game" to "Recompiled game options")
-    fun parentSection() = when (section) { "graphics", "game" -> "advanced"; "layouts" -> "touch"; else -> "" }
+    val titles = mapOf("display" to "Display & performance", "touch" to "Touch controls", "layouts" to "Saved control layouts", "saves" to "Saves", "reports" to "Help & reports", "controller" to "Controller & keyboard", "audio" to "Audio", "online" to "Multiplayer", "files" to "Game & storage", "advanced" to "Advanced", "graphics" to "Advanced graphics", "game" to "Game settings")
+    fun parentSection() = when (section) { "graphics" -> "advanced"; "layouts" -> "touch"; else -> "" }
     BackHandler(section.isNotEmpty()) { if (!FileWork.busy) section = parentSection() }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (section.isNotEmpty() || showRootTitle) Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (section.isNotEmpty()) IconButton(enabled = !FileWork.busy, onClick = { section = parentSection() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back to settings") }
-            Text(titles[section] ?: "Settings", color = Mh4uColors.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+            Text(titles[section] ?: "Settings", color = Mh4uColors.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.weight(1f)) {
             when (section) {
                 "display" -> SimpleDisplayPage(inGame = onEditOverlay != null)
                 "touch" -> TouchSettingsPage(onEditOverlay, onOverlayChanged) { section = "layouts" }
                 "layouts" -> LayoutProfilesPage(onOverlayChanged)
-                "saves" -> SavesPage(inGame = onEditOverlay != null)
+                "saves" -> SavesPage(inGame = onEditOverlay != null, session = saveSession)
                 "reports" -> ReportsPage()
                 "controller" -> ControlsPage(includeTouch = false)
                 "audio" -> AudioPage()
                 "online" -> MultiplayerPage()
                 "graphics" -> DisplayPage()
-                "game" -> if (hasCodeLibrary()) GamePage() else SettingsColumn { Hint("These options need a matching recompiled code library. Normal emulation is available without one.") }
+                "game" -> GamePage(recompiledAvailable = recompiledOptionsAvailable(), inGame = onEditOverlay != null)
                 "files" -> SettingsColumn {
                     SectionTitle("Your game")
                     Panel {
@@ -67,7 +74,7 @@ import java.io.File
                         if (onPickGame != null) AmberButton("Choose game") { onPickGame() } else Hint("Choose another game from Home after closing this session.")
                     }
                     SectionTitle("App storage")
-                    Panel { Text("Monster Hunter 4 - Rowell", fontWeight = FontWeight.SemiBold); Hint("This app keeps its own progress, controls and settings."); Spacer(Modifier.height(10.dp)); Hint(Storage.root.absolutePath) }
+                    Panel { Text("Monster Hunter 4", fontWeight = FontWeight.SemiBold); Hint("This app keeps its own progress, controls and settings."); Spacer(Modifier.height(10.dp)); Hint(Storage.root.absolutePath) }
                     Panel { Hint("Save your progress inside Monster Hunter before closing the game. Moving buttons does not save game progress.") }
                 }
                 "advanced" -> SettingsColumn {
@@ -77,28 +84,47 @@ import java.io.File
                         if (hasCodeLibrary()) Hint("A code library is present. Runtime compatibility is checked when the game starts.")
                     }
                     ActionTile("Advanced graphics", "Shader behaviour, filters and additional layouts", Icons.Rounded.Tune) { section = "graphics" }
-                    if (hasCodeLibrary()) ActionTile("Recompiled game options", "Frame rate, widescreen and game-specific features", Icons.Rounded.Code) { section = "game" }
+                    ActionTile("Game settings", "Frame rate, CPU clock and game-specific features", Icons.Rounded.Code) { section = "game" }
                 }
-                else -> SettingsColumn {
-                    ActionTile("Display & performance", "Fullscreen, layout and picture quality", Icons.Rounded.Fullscreen) { section = "display" }
-                    ActionTile("Touch controls", "Layout, colours, opacity and vibration", Icons.Rounded.TouchApp) { section = "touch" }
-                    ActionTile("Saves", "Back up, export or restore saved progress", Icons.Rounded.Save) { section = "saves" }
-                    ActionTile("Controller & keyboard", "Bluetooth / USB devices and button bindings", Icons.Rounded.SportsEsports) { section = "controller" }
-                    ActionTile("Audio", "Game volume", Icons.AutoMirrored.Rounded.VolumeUp) { section = "audio" }
-                    ActionTile("Multiplayer", "Join or host a network room", Icons.Rounded.Wifi) { section = "online" }
-                    ActionTile("Game & storage", "Selected game and separate app folder", Icons.Rounded.FolderOpen) { section = "files" }
-                    ActionTile("Advanced", "Optional setup and extra settings", Icons.Rounded.Build) { section = "advanced" }
-                    ActionTile("Help & reports", "Share an error report", Icons.Rounded.BugReport) { section = "reports" }
-                }
+                else -> SettingsIndex { section = it }
             }
         }
     }
 }
 
 private fun hasCodeLibrary() = File(Storage.recomp, "0004000000126300.so").isFile
+private fun recompiledOptionsAvailable() = hasCodeLibrary() && (!Native.isRunning() || Native.notice().isBlank())
+
+@Composable private fun SettingsIndex(onSelect: (String) -> Unit) {
+    val entries = listOf(
+        Triple("display", "Display & performance", Icons.Rounded.Fullscreen),
+        Triple("game", "Game settings", Icons.Rounded.Speed),
+        Triple("touch", "Touch controls", Icons.Rounded.TouchApp),
+        Triple("saves", "Saves", Icons.Rounded.Save),
+        Triple("controller", "Controller & keyboard", Icons.Rounded.SportsEsports),
+        Triple("audio", "Audio", Icons.AutoMirrored.Rounded.VolumeUp),
+        Triple("online", "Multiplayer", Icons.Rounded.Wifi),
+        Triple("files", "Game & storage", Icons.Rounded.FolderOpen),
+        Triple("advanced", "Advanced", Icons.Rounded.Build),
+        Triple("reports", "Help & reports", Icons.Rounded.BugReport),
+    )
+    LazyVerticalGrid(columns = GridCells.Adaptive(200.dp), contentPadding = PaddingValues(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
+        items(entries, key = { it.first }) { (id, label, icon) ->
+            Surface(onClick = { onSelect(id) }, enabled = !FileWork.busy, shape = RoundedCornerShape(12.dp),
+                color = Mh4uColors.PopupBg, contentColor = Mh4uColors.Text, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(icon, null, tint = Mh4uColors.Amber, modifier = Modifier.size(20.dp))
+                    Text(label, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Icon(Icons.Rounded.ChevronRight, null, tint = Mh4uColors.TextDisabled, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
 
 @Composable fun SettingsColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
 }
 
 @Composable private fun SimpleDisplayPage(inGame: Boolean) = SettingsColumn {
@@ -110,6 +136,7 @@ private fun hasCodeLibrary() = File(Storage.recomp, "0004000000126300.so").isFil
         Hint(if (inGame) "Changes save automatically. Tap Resume above to apply. No game restart needed." else "Changes save automatically and apply when you start the game.")
         if (screens.startsWith("centered-")) Hint("The game stays centered with equal space on both sides. The small screen sits in the right margin.")
     }
+    FrameRateSettings(recompiledAvailable = recompiledOptionsAvailable())
     if (inGame) {
         SectionTitle("Solo game speed")
         Panel {
@@ -154,6 +181,7 @@ private fun hasCodeLibrary() = File(Storage.recomp, "0004000000126300.so").isFil
         Text("Make the layout yours", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Hint("Move and resize buttons, or add a combo for several buttons at once.")
+        Hint("Hide / Show toggles the small touch screen. 2nd enlarges it; Back returns to your layout.")
         Spacer(Modifier.height(12.dp))
         if (onEditOverlay != null) AmberButton("Edit button layout", Modifier.fillMaxWidth()) { onEditOverlay() }
         else Hint("Open the game, then Menu → Touch controls → Edit button layout.")
@@ -184,10 +212,11 @@ private fun hasCodeLibrary() = File(Storage.recomp, "0004000000126300.so").isFil
 
 @Composable fun AboutPage() {
     val context = LocalContext.current
+    val version = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var license by remember { mutableStateOf(false) }
     SettingsColumn {
-        Text("Monster Hunter 4 - Rowell", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Hint("Version 1.0.6 · Android")
+        Text("Monster Hunter 4", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Hint("Version $version · Android")
         Panel { Text("A simpler home for your hunts.", fontWeight = FontWeight.SemiBold); Hint("Custom Android interface and controls by Rowell.") }
         SectionTitle("Built with the community")
         Panel { Text("Android base: klark231 / MH4U-Android"); Spacer(Modifier.height(8.dp)); Text("Original port: CompaLarios18 / MH4UltimateDC"); Spacer(Modifier.height(8.dp)); Text("Emulator core: Azahar / AzaharPlus"); Spacer(Modifier.height(8.dp)); Hint("Monster Hunter 4 Ultimate and its game content belong to Capcom. Game files are not included.") }

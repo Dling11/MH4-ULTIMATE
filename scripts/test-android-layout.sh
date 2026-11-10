@@ -6,3 +6,5 @@ c++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/android_screen_layout_test.
 .local/checks/android-screen-layout
 c++ -std=c++17 -Wall -Wextra -Werror -pedantic tests/android_speed_test.cpp -o .local/checks/android-speed
 .local/checks/android-speed
+c++ -std=c++17 -Wall -Wextra -Werror -pedantic -pthread tests/android_save_read_queue.cpp -o .local/checks/android-save-reads
+.local/checks/android-save-reads

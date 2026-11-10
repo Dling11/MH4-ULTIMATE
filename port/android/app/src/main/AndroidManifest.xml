@@ -17,7 +17,7 @@
         android:allowBackup="false"
         android:icon="@drawable/ic_mh4_icon"
         android:roundIcon="@drawable/ic_mh4_icon"
-        android:label="Monster Hunter 4 - Rowell"
+        android:label="Monster Hunter 4"
         android:theme="@style/Theme.MH4U"
         android:extractNativeLibs="true">
         <provider
@@ -38,6 +38,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".SaveRestartActivity"
+            android:exported="false"
+            android:process=":save_restart"
+            android:noHistory="true"
+            android:screenOrientation="sensorLandscape" />
 
         <activity
             android:name=".EmulationActivity"

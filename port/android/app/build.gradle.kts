@@ -14,15 +14,15 @@ android {
     namespace = "org.mh4u.port"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
-    ndkVersion = "29.0.14206865"
+    if (!usePrebuiltEngine) ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.rowell.mh4u"
         minSdk = 29
         targetSdk = 35
         // CI passes its run number, so every build counts as newer than the last
-        versionCode = System.getenv("MH4U_VERSION_CODE")?.toIntOrNull() ?: 7
-        versionName = "1.0.6"
+        versionCode = System.getenv("MH4U_VERSION_CODE")?.toIntOrNull() ?: 17
+        versionName = "1.0.16"
         ndk { abiFilters += listOf("arm64-v8a") }
         if (!usePrebuiltEngine) externalNativeBuild {
             cmake {
@@ -39,7 +39,8 @@ android {
         }
     }
 
-    if (usePrebuiltEngine) sourceSets.getByName("main").jniLibs.srcDir(privateBuildDir.resolve("engine"))
+    if (usePrebuiltEngine) sourceSets.getByName("main").jniLibs.srcDir(
+        providers.gradleProperty("engine.prebuilt.dir").orNull?.let { file(it) } ?: privateBuildDir.resolve("engine"))
     if (!usePrebuiltEngine) externalNativeBuild {
         cmake {
             path = file("$azaharDir/CMakeLists.txt")
@@ -82,7 +83,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
-    packaging { jniLibs.useLegacyPackaging = true }   // the code library is dlopen'ed from files
+    packaging {
+        jniLibs.useLegacyPackaging = true   // the code library is dlopen'ed from files
+        if (usePrebuiltEngine) jniLibs.keepDebugSymbols += "**/*.so"
+    }
 }
 
 dependencies {

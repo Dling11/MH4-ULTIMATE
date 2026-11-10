@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "nativeCoreCommit": "039adda20c31fdf644fd3c9cf6962812ff109818",
+  "runtimeHostVersion": 4,
+  "files": {
+    "runtime": {
+      "tools/recomp/runtime/recomp.h": "e3c47516aa7480f05ff9de46fe3412423313beb7a1a1606bc80c39b02f39001b",
+      "tools/recomp/runtime/rc_dll.c": "3064773b958e81ee142a08aeac8c6683371b2ffeb297ab3f05e4af7f776167e1"
+    },
+    "hooks": {
+      "config/hooks.txt": "ef16d327fa9c47498569b9683b3f20664c3e631e462c12dd197a019ef71754f1",
+      "config/tunables.txt": "6b5809fb3c8f732eb9623ad7ede54e0df197c8bfa38cbf220485493513cfb967",
+      "config/versions.json": "8e2779908f524f6c32602725c875fa4f9f065b927bca71bea733390c60951c22"
+    },
+    "recompiler": {
+      "tools/recompile.py": "026c0836f35a7263801fcc59c68f624b9a547f746d074bb74d25934b6e509ea4",
+      "tools/recomp/analysis.py": "650f2fa9fb17206d81dd18f522aa740e5ed1e3019f311912c9fd4f266ff0b35e",
+      "tools/recomp/emit.py": "2c4142994806bff35aec394ca23683461dc838f5f3fff8150d8dfc7255517452",
+      "tools/recomp/arm.py": "0d989afd3899f3c7632bd88706afb1ab42c34e601e323ebca3c6034903092b88",
+      "tools/recomp/thumb.py": "b8208352681d1ea2693a9ebcdf74e136f4e8d0356975ee8fe85bc2771b3648dc",
+      "tools/recomp/insn.py": "2fdb5c0533109051e53d87a25bf8860f45118df77f0e40b79b6c11fd71a43306",
+      "tools/recomp/build.py": "4df9e24767ba5a016b3df2c1098e923c7742a4f8fec619d2a5bcf4ed5efa1a60",
+      "tools/build_game.py": "11584b3368793ef87c4d5eab006b862f4c91b36624d93bdcc687eb5dcd236eba",
+      "tools/extract_ncch.py": "7fbfcd2f28d1e17e0507d275b6a064562f22693131f506b4047c50ffd1fac939",
+      "tools/codebin2elf.py": "c05de503123c96aab727ea60d36459f842ddfbbce1957e5f6bca346229cba184",
+      "tools/exheader.py": "d2828ace3096b0b0e7ebd2b1ddc96f9aa5df94eb82a2cb2783c7440eba9cf9aa",
+      "tools/blz.py": "d756e41c5d8693bcf26fe2952626ea8ff3274b2cc1865af70597343c08f64a8f"
+    },
+    "androidPatches": {
+      "port/azahar/azahar-android.patch": "b398c8b00850577b3be3421a14211610ac2c3dc14b20b9b7d2f16392865ff116",
+      "port/azahar/rowell-window-layout.patch": "a419c08b4e9f9aebdc81eef4554b050e52c0c500d7b08ebf3f0545b6fe761376",
+      "port/azahar/rowell-speed-present.patch": "bc85e1b8ffc2c5fcaddbae3d6f06f0c0e2459844f3688dd261d80f7d51637e74"
+    },
+    "nativeSetup": {
+      "scripts/prepare-native.sh": "f466353551e501078b2a2d78caaca2b47489cf3f43bcce6fa1a2ddcaa3e4da28"
+    }
+  },
+  "upstream": [
+    {
+      "repository": "klark231/MH4U-Android",
+      "reference": "main",
+      "baselineCommit": "f73fe36d776911fe04efa8550da2d4f607024b9c",
+      "role": "Android source baseline"
+    },
+    {
+      "repository": "CompaLarios18/MH4UltimateDC",
+      "reference": "main",
+      "baselineCommit": "07aa14957f76fe4c0dd0c0109370785d83e4ea22",
+      "role": "Port/recompiler research baseline"
+    },
+    {
+      "repository": "klark231/AzaharPlus",
+      "reference": "HEAD",
+      "baselineCommit": "039adda20c31fdf644fd3c9cf6962812ff109818",
+      "role": "Pinned emulator core"
+    }
+  ],
+  "policy": "Review upstream changes and rebuild/test compatible engine and private game-code files before updating this lock. Never auto-merge, auto-install or bundle game-derived code in the APK."
+}

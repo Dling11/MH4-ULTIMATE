@@ -38,7 +38,7 @@ object Diagnostics {
         val file = File(folder, "MH4U-Rowell-error-report.zip")
         val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName
         val info = buildString {
-            appendLine("Monster Hunter 4 - Rowell $version")
+            appendLine("Monster Hunter 4 $version")
             appendLine("Created: ${Instant.now()}")
             appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")

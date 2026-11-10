@@ -11,5 +11,5 @@ if (!$PrepareOnly) {
     if ($outputMetadata.applicationId -ne 'com.rowell.mh4u') { throw 'Unexpected app identity; packaging stopped.' }
     $distFolder = Join-Path $projectRoot 'dist'
     New-Item -ItemType Directory -Force -Path $distFolder | Out-Null
-    Copy-Item -LiteralPath (Join-Path $outputFolder 'app-release.apk') -Destination (Join-Path $distFolder "Monster-Hunter-4-Rowell-$($outputMetadata.elements[0].versionName).apk")
+    Copy-Item -LiteralPath (Join-Path $outputFolder 'app-release.apk') -Destination (Join-Path $distFolder "Monster-Hunter-4-$($outputMetadata.elements[0].versionName).apk")
 }

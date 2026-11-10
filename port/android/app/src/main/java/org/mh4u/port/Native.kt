@@ -19,6 +19,8 @@ object Native {
     @JvmStatic external fun isRunning(): Boolean
     /** True only after the emulation thread has completed shutdown and released save files. */
     @JvmStatic external fun saveDataIdle(): Boolean
+    /** Executes a read/copy between emulated CPU loops, including while the game menu is paused. Never restore here. */
+    @JvmStatic external fun withSavedFiles(action: Runnable): Boolean
 
     @JvmStatic external fun touch(x: Int, y: Int, down: Boolean)
     @JvmStatic external fun touchMove(x: Int, y: Int)
@@ -28,6 +30,8 @@ object Native {
 
     /** Re-reads mh4u-app.ini and applies it; [extras]: "key=value" lines (see native.cpp). */
     @JvmStatic external fun applySettings(extras: String)
+    /** Queued screen geometry refresh only; does not reconfigure audio, shaders or input devices. */
+    @JvmStatic external fun applyScreenLayout(extras: String)
     /** Temporary lower-screen focus; does not write the saved layout or swap setting. */
     @JvmStatic external fun setSecondScreenExpanded(expanded: Boolean)
     /** A game option (mh4u.ini) changed while the game runs. */

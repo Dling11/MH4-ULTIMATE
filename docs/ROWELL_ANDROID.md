@@ -4,6 +4,10 @@ This is a separately compiled Android frontend. The original APK is not edited o
 
 Application ID: `com.rowell.mh4u`. The Kotlin/JNI namespace remains `org.mh4u.port` because the native core calls those classes by name. Both launcher and game are locked to landscape. Each installation has a separate `files/MH4U_Rowell` user folder.
 
+## Version 1.0.16: faint walking-joystick feedback
+
+The walking circle pad keeps the theme colour with a faint pressed fill. Its base uses 8% of the selected opacity at rest and 14% while held; the outlined moving thumb uses 22–30%. The camera stick, action/combo buttons and input handling are unchanged. This is a UI-only update that keeps the seven native libraries from 1.0.15 and the existing game-code library, saves and layouts.
+
 ## Build in Docker
 
 The existing `monster-hunter-tri-android:rowell` image supplies Java, Android SDK 35, NDK 29.0.14206865 and CMake 3.28.3. No Windows SDK or Android Studio installation is needed. Gradle 8.9 is downloaded and checked against its official SHA256. Dependencies, native source, signing key and logs stay in ignored `.local/`.
@@ -15,6 +19,28 @@ The existing `monster-hunter-tri-android:rowell` image supplies Java, Android SD
 Keep `.local/signing/rowell.jks` and its password file privately backed up: future app updates need this signing identity. Do not publish them. The Android sources compile from this project; no game ROM or generated game-code library is bundled.
 
 Since 1.0.2 the default build compiles the native backend from source so the Android window fix is included. `prepare-native.sh` pins AzaharPlus to `039adda20c31fdf644fd3c9cf6962812ff109818`, initializes its pinned submodules and applies the existing Android port patch. Since 1.0.3 it also applies `rowell-window-layout.patch`, making framebuffer layout refresh virtual so renderer-initiated refreshes retain the Android preset. The layout implementation lives in this project's JNI sources. Native compilation uses two jobs and one link job within the existing Docker limits. The earlier verified upstream libraries remain a comparison baseline; importing them alone does not include these layout fixes.
+
+## UI builds with an existing Windows toolchain
+
+For UI-only edits, use the seven verified ARM64 libraries from a source build with matching JNI functions. Version 1.0.8 adds `Native.withSavedFiles`; engines from 1.0.6/1.0.7 cannot run the new save screens. Build the native engine first with the source workflow above. For later UI-only edits, set `JAVA_HOME` to JDK 17 and `ANDROID_HOME` to an Android SDK containing platform/build-tools 35, then use Gradle 8.9:
+
+```powershell
+gradle --project-dir port/android -Pengine.prebuilt=true -Pengine.prebuilt.dir=C:\private\rowell-engine testDebugUnitTest assembleRelease lintRelease
+```
+
+The selected engine directory must contain `arm64-v8a/*.so`. Preserve the existing Rowell signing files. This mode does not require Docker or an NDK because it keeps the verified native libraries unchanged. It is suitable only when no JNI/native source changes need compiling. The original imported upstream engine lacks the newer Rowell JNI functions; it and the separate khorne-hub Native app's libraries must not be substituted. The normal source build above remains available for native changes.
+
+## Version 1.0.8: clearer save dialogs and in-game operations
+
+Save choices describe the user's task: **Use in another MH4U app**, **Keep a backup file**, **From another MH4U app**, and **From a backup file**. Personal names are removed from save-format labels, save ZIP filenames and format-error messages. The existing archive manifest identifier remains unchanged so older exported backups stay compatible.
+
+The save dialogs use a scrollable body, fixed confirmation footer, clear option cards and completion/error dialogs. Folder selection instructions appear before Android's picker opens. Backup/export remain copies of the last in-game save. Import's Yes/No confirmation explains replacement, the safety backup, unchanged settings and the required restart.
+
+Backup and Export are available in the running game's menu. `Native.withSavedFiles` schedules their synchronous file-copy work between emulated CPU loops, flushes buffered native file streams, and also services the read while the offline menu is paused. A closed core performs the same read under the run mutex. The dedicated read queue cancels pending requests at shutdown. The UI's file-work gate prevents overlapping operations. These callbacks are for reading saved progress and writing backup/export files only; they never restore into the active save directory.
+
+Import validates its archive before stopping the game. After Yes, the activity holds its normal finish callback, requests shutdown and waits until the run mutex confirms filesystem closure. The existing transactional restore then makes its safety backup and replaces progress. On success, a private, unexported restart activity in a small helper process restarts only this app and opens the game when its configured file is available. The helper does not initialize the emulator or open saves. Restarting the process also discards the old in-memory game and multiplayer session. Controls, settings, game files and the separate official Native app are outside the import scope. Failure leaves the user with a message/recovery route and does not launch a new game over an unfinished restore.
+
+Validation includes real-file restore sequencing tests (including the final shutdown flush), rejection before closing for invalid input, and native scheduling tests for a paused game, shutdown cancellation, exceptions and stale requests. Compile/lint tests do not verify Android restart/picker behavior or visual layout; those checks remain pending on the phone. The earlier FPS/menu-pause investigation remains deferred at the owner's request.
 
 ## Layout persistence
 
@@ -64,4 +90,140 @@ An additional JVM integration check exported and restored an isolated copy of th
 3. Open dialogue/cooking/quest choices, tap `2nd`, use lower-screen touch input and return. Verify Menu remains reachable and the prior layout returns for each display preset.
 4. Create an error report, inspect its ZIP contents and share/cancel through Android. Verify the app returns to its menu normally.
 5. Play a full quest, check normal and accelerated speed, sound, and Home/reopen after saving. Check a second device before claiming broad Android performance compatibility.
+
+## Version 1.0.7: save transfers and Menu → Resume
+
+This update targets `com.rowell.mh4u` only. The separate official Native app stays unchanged. It includes the prepared 1.0.6 tools above.
+
+Export and Import now offer **Native / Azahar folder** or **Rowell backup ZIP**. The folder importer reads a user-selected `sdmc` export through Android's system picker, checks the USA title, character files, metadata and size limits, then converts it into the existing verified archive format. It stages everything before confirmation and uses the same safety backup, transactional restore and recovery journal. Only the game's save and extra-data scopes are replaced. Game images, NAND, controls and settings remain outside that scope. Incomplete, European or ambiguous exports produce an error before touching saved progress. Missing extra data is explicitly disclosed before replacement.
+
+The folder exporter creates a new dated folder and verifies each written file by reading it back. Choose a destination directly in Internal storage, such as `MH4U_Saves`. The output contains both the standard Azahar `sdmc` structure and a compact title/extra-data structure that Native 0.1.8's six-level storage scan can discover. Keep the entire export folder together. No permission to another app's private data or background synchronization is added. The existing manifest ZIP format remains available for Rowell backups.
+
+On Resume, the app formerly submitted all core settings even when nothing changed. The pinned core's `System::ApplySettings()` requests shader updates and invokes `DspInterface::SetSink()`, which recreates the audio sink. The new gate compares the relevant core settings, screen extras and touch-screen layout. Unchanged resumes skip that work; real changes, new game sessions and forced configuration refreshes still apply. Repeatedly closing an already-closed enlarged second-screen view is also skipped. The intentional offline pause while settings are open remains.
+
+A recording of the first 1.0.7 phone test showed the title-screen counter dropping briefly after Resume and recovering to about 60 FPS. The native counter divides frame counts by elapsed real time, so the interval overlapping a pause reports a low number. The updated badge discards that paused interval, waits for a full live second and then shows the measured value. Menu/editor/background time is excluded; no target FPS, CPU clock or game timing is changed. This counter correction still needs an updated-device retest and does not establish that every possible gameplay hitch is resolved.
+
+The build uses the same seven native libraries as 1.0.6. All 41 JVM tests and Android lint passed. An isolated round trip of the owner's previously backed-up save checked all 16 save/extra-data files and preserved controls/settings. These checks do not establish Android picker behavior or a measured gameplay improvement. With the owner's approval, 1.0.7 was installed over Rowell 1.0.5 on the POCO F5 and its launcher opened. All 36 backed-up Rowell files retained their hashes, as did the separate Native app's 25 checked files; its installed package stayed unchanged. Menu → Resume, file pickers and gameplay still need user testing. Check an unchanged Resume, an actual display change, import cancellation, a same-save import, and a full quest.
+
+### Frame-rate limits
+
+The existing 30–120 FPS cap is under **Advanced → Recompiled game options** and is shown only when this older port has its matching USA code library. Without it, Rowell uses normal Azahar CPU emulation. The separate official Native app's differently named library is not compatible with this older loader. This patch does not unlock 120 FPS or claim an FPS benchmark; the offline speed multiplier is a different setting.
+
+# Version 1.0.9: compact launcher and live settings
+
+Historical behaviour below is superseded by the 1.0.10 editor/visibility update.
+
+The launcher removes the large logo/name header and bottom navigation bar. Home,
+Settings and About use compact side navigation. Home keeps the selected game and
+Play action together; settings categories use an adaptive grid. Detail pages have
+smaller margins while retaining their existing controls and save confirmations.
+
+In-game settings open in a side panel with the game visible behind it. Opening
+that panel does not pause solo gameplay. Editing touch controls or leaving the
+app still pauses solo play; returning from Android Home resumes play unless the
+control editor is still open. Multiplayer retains its existing no-pause policy.
+Game inputs are released and blocked while the menu is open. Native settings
+changes still use the existing queued application path, and save export/import
+retains the existing safe-copy and stopped-core restore paths.
+
+Version 1.0.9 uses exactly the same seven engine libraries as the verified 1.0.8
+APK. Package, signing certificate, save folders, game selection and stored control
+layouts are unchanged. No Azahar/AzaharPlus core upgrade is included. All 51 JVM
+tests passed and Android lint reports zero errors. Home appearance, real gameplay
+continuing behind the menu and background/editor transitions still need physical
+phone validation before publication.
+
+# Version 1.0.10: live editor and Hide / Show
+
+The owner accepted the compact Home/settings layout and reported that only the
+touch-control editor still froze the scene. The editor now keeps solo gameplay
+running while controls are moved or resized. Entering it releases all held game
+inputs, and editor gestures and controller input remain blocked from the game.
+Android Home/lock still pauses solo play; returning resumes it. Multiplayer keeps
+its existing no-pause policy. Edit in a safe area because the game remains active.
+
+A separate movable Hide / Show control hides the small screen using the existing
+Main screen only layout. Show restores the previous layout and screen-swap choice.
+Hidden touch-screen areas reject taps immediately, including while a layout change
+is queued. The original 2nd control still opens the enlarged touch screen, even
+when hidden; Back returns to the previously selected visibility. No screen or
+touch-button positions are reset. Existing layout files gain only the new utility
+button in memory; they are not rewritten until the owner saves a layout.
+
+This is a Kotlin-only update using the seven verified 1.0.9 native libraries.
+The package, signing key and data folders remain unchanged. No Native-app, game
+assets, engine upgrade, Docker operation or public download change is included.
+Check editor animation, input isolation, Hide/2nd/Back/Show, restored layouts and
+Android Home/return on the phone before claiming those physical checks passed.
+
+# Version 1.0.11: screen changes preserve audio
+
+The owner confirmed live control editing in 1.0.10. Hide / Show worked but caused
+a brief sound interruption, unlike 2nd. Changing the saved screen layout previously
+used System::ApplySettings, which recreates the audio sink and reloads input devices.
+
+The apply gate now compares core settings separately from screen geometry. A layout,
+screen-swap, gap or touch-screen corner/size change uses a queued JNI window refresh
+without applying the core's audio, shader or input configuration. An unchanged Resume
+does nothing. Actual audio/resolution/input changes, a forced refresh or a new game
+session still use the full settings path. Failed submissions can be retried.
+
+Only libmh4u-android.so is rebuilt, using the same pinned Azahar core revision.
+The other six native libraries, package, signing key, saves and control layout format
+remain unchanged. No Native-app or website change is included. The separate 2nd/Back
+behaviour and live editor are retained. The owner confirmed continuous music and
+working Hide / Show and 2nd / Back on the POCO F5 in 1.0.11. This targeted check
+does not establish sustained quest, multiplayer or benchmark performance.
+
+# Version 1.0.12: Monster Hunter 4
+
+The launcher label, About title and storage-settings heading now read Monster
+Hunter 4. Rowell's custom-interface credit and all upstream credits remain in
+About. The game logo and compact Home design stay unchanged. APK filenames use
+Monster-Hunter-4-1.0.12.apk; the source build script uses this filename too.
+
+This is a name-only update. All seven native libraries match the owner-tested
+1.0.11 build. Keep applicationId com.rowell.mh4u, the existing signing key and
+MH4U_Rowell data folder so installing over the existing app preserves its game,
+progress, controls and settings. Do not migrate or rename the saved-data folder.
+
+# Version 1.0.13: visible Game settings and frame-cap presets
+
+Game settings is now a root category and remains accessible from Advanced without
+requiring a code library just to open the page. CPU clock is independently usable
+with normal emulation. Frame rate uses explicit 30 / 60 / 120 FPS presets, with 60
+as the missing-setting default. Opening the page never overwrites an existing cap,
+including older custom values. The same frame-cap component is available in Display
+& performance. The performance counter and session speed controls remain separate.
+
+Hook-specific frame cap, game effects, net sync and quest shortcuts stay visible
+but disabled without a code library, or when the running backend reports a library
+problem. Standard graphics settings and the renderer's touch-overlay layout stay
+available. File presence alone does not prove runtime compatibility; no actual
+120 FPS claim is made. The user's current default recomp folder has no library,
+so this UI update does not unlock a higher frame rate for that normal-emulation
+session. Adding functional recompiled-mode support still needs matching game code.
+
+Widget rows support disabled pointer and accessibility actions. No engine, save,
+input mapping, signing or data-folder changes are included. All seven native
+libraries match 1.0.12, including the owner-confirmed live-editor and sound fixes.
+
+# Version 1.0.14: one-time FPS setup and upstream compatibility checks
+
+The presets now include 90 FPS. With a matching update and code library loaded,
+the existing game hooks change the cap and GPU refresh rate live. No library
+rebuild or game restart is required for each selection. 60 stays the default;
+normal gameplay speed and actual FPS must be checked on the phone.
+
+The first library was generated privately from the already-present USA v1.3.0
+update after checking the known code and identifying-header hashes. Generated
+code, the update and the library remain ignored and separate from the APK. The
+separate Native app is not modified or used as this app's runtime.
+
+`config/android-compatibility.json` records the pinned core and source contract.
+`tools/check_android_compatibility.py` checks that contract, including the actual
+prepared core checkout, and can report upstream tips without merging. The Android
+bootstrap invokes the local check. See `UPSTREAM_UPDATES.md` for review/rebuild and
+phone-validation requirements. Existing custom controls, save management and the
+owner-confirmed audio/live-menu fixes remain unchanged.
 

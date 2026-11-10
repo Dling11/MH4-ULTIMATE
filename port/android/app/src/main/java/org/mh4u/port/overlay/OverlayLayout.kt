@@ -29,7 +29,7 @@ data class Control(
     var latch: Boolean = false,
     var visible: Boolean = true,
 ) {
-    enum class Kind { BUTTON, DPAD, CIRCLE_PAD, C_STICK, COMBO, MENU, SPEED, SCREEN }
+    enum class Kind { BUTTON, DPAD, CIRCLE_PAD, C_STICK, COMBO, MENU, SPEED, SCREEN, SCREEN_VISIBILITY }
 
     fun toJson() = JSONObject().put("id", id).put("kind", kind.name).put("label", label).put("mask", mask)
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size.toDouble())
@@ -64,6 +64,7 @@ class OverlayLayout(val controls: MutableList<Control>, var opacity: Float = 0.6
         ensureSpeedButton(portrait)
         if (controls.none { it.kind == Control.Kind.MENU }) controls += Control("menu", Control.Kind.MENU, "☰", 0, .50f, .06f, .07f)
         if (controls.none { it.kind == Control.Kind.SCREEN }) controls += screenButton(portrait)
+        if (controls.none { it.kind == Control.Kind.SCREEN_VISIBILITY }) controls += visibilityButton(portrait)
         return this
     }
 
@@ -136,6 +137,7 @@ class OverlayLayout(val controls: MutableList<Control>, var opacity: Float = 0.6
                 list += Control("menu", Control.Kind.MENU, "☰", 0, .50f, .06f, .07f)
                 list += speedButton(false)
                 list += screenButton(false)
+                list += visibilityButton(false)
             } else {
                 btn("l", "L", b.L, .10f, .46f, .07f); btn("r", "R", b.R, .90f, .46f, .07f)
                 btn("zl", "ZL", b.ZL, .10f, .55f, .07f); btn("zr", "ZR", b.ZR, .90f, .55f, .07f)
@@ -148,6 +150,7 @@ class OverlayLayout(val controls: MutableList<Control>, var opacity: Float = 0.6
                 list += Control("menu", Control.Kind.MENU, "☰", 0, .50f, .44f, .05f)
                 list += speedButton(true)
                 list += screenButton(true)
+                list += visibilityButton(true)
             }
             return OverlayLayout(list)
         }
@@ -156,5 +159,7 @@ class OverlayLayout(val controls: MutableList<Control>, var opacity: Float = 0.6
             .62f, if (portrait) .44f else .06f, if (portrait) .07f else .10f)
         private fun screenButton(portrait: Boolean) = Control("screen", Control.Kind.SCREEN, "2nd", 0,
             .74f, if (portrait) .44f else .06f, if (portrait) .07f else .10f)
+        private fun visibilityButton(portrait: Boolean) = Control("screen-visibility", Control.Kind.SCREEN_VISIBILITY, "Hide screen", 0,
+            .84f, if (portrait) .44f else .06f, if (portrait) .07f else .10f)
     }
 }

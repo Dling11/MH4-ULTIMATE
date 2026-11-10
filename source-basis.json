@@ -1,12 +1,12 @@
 {
-  "appName": "Monster Hunter 4 - Rowell",
+  "appName": "Monster Hunter 4",
   "gameIncluded": false,
   "upstreamWorkflowRun": 39394095611,
   "sourceRepository": "https://github.com/klark231/MH4U-Android",
-  "version": "1.0.6",
+  "version": "1.0.16",
   "applicationId": "com.rowell.mh4u",
   "upstreamApkSha256": "be84e23f127fd91a7227d0051b24e8a9d02c01d246cc297727b3ed53c829948e",
-  "newApkGameplayVerified": false,
+  "newApkGameplayVerified": true,
   "sourceCommit": "f73fe36d776911fe04efa8550da2d4f607024b9c",
   "upstreamApkSourceCommit": "7eea414f20bdc303ddd100ba6a6f3446993c65f7",
   "upstreamNativeLibraries": [
@@ -92,12 +92,19 @@
     },
     {
       "name": "libmh4u-android.so",
-      "bytes": 40197272,
-      "sha256": "af43c3b673db9d7138a0addfa5de42063fe21cd082fc04ad4a943d95a5e90d8a"
+      "bytes": 40210808,
+      "sha256": "da6327d3d009936bd24f54250d580428e875bfdabc38ccce7cd33273b15cfa18"
     }
   ],
   "nativeWindowPatchSha256": "a419c08b4e9f9aebdc81eef4554b050e52c0c500d7b08ebf3f0545b6fe761376",
   "nativeSpeedPatchSha256": "bc85e1b8ffc2c5fcaddbae3d6f06f0c0e2459844f3688dd261d80f7d51637e74",
-  "newApkGameplayVerification": "Prepared on PC without a phone connection; all 1.0.6 device checks are pending",
-  "nativeAndroidWindowChanges": "Temporary lower-screen focus and a closed-core save-data check; pinned emulator revision and existing core patches unchanged"
+  "newApkGameplayVerification": "1.0.16: walking-pad appearance only; same native engine and game-code library as1.0.15. Phone visual check confirmed. Prior1.0.14 Village result:60FPS at100% speed;120 slow. No new quest/multiplayer/clean-install validation.",
+  "nativeAndroidWindowChanges": "Existing temporary lower-screen focus and closed-core check preserved; new safe saved-file read callbacks at CPU-loop boundaries. Confirmed imports wait for shutdown and restart only this app.",
+  "androidPackagingMode": "Source-built JNI with the existing pinned Azahar core and patches; isolated existing Docker toolchain",
+  "nativeEngineBaselineApk": "Monster-Hunter-4-1.0.15.apk",
+  "nativeEngineByteIdenticalToPreviousApk": true,
+  "nativeCoreRevisionUnchanged": true,
+  "androidBridgeUpdated": false,
+  "nativeSupportLibrariesByteIdenticalToPreviousApk": true,
+  "phoneUiAndAudioFixVerified": true
 }

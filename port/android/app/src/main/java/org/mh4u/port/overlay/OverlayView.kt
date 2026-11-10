@@ -36,10 +36,13 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
     var onMenu: (() -> Unit)? = null
     var onSpeed: (() -> Unit)? = null
     var onSecondScreen: (() -> Unit)? = null
+    var onScreenVisibility: (() -> Unit)? = null
     var onEditCheckpoint: (() -> Unit)? = null
     var onEditChanged: (() -> Unit)? = null
     var secondScreenExpanded = false
         set(value) { field = value; releaseEverything(); invalidate() }
+    var smallScreenHidden = false
+        set(value) { if (field != value) { field = value; releaseEverything(); invalidate() } }
     var speedPercent = 100
         set(value) { if (field != value) { field = value; invalidate() } }
     var speedBlocked = false
@@ -95,7 +98,7 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
         val high = extent - after - margin
         return if (high >= low) value.coerceIn(low, high) else extent / 2f
     }
-    private fun utility(c: Control) = c.kind == Control.Kind.MENU || c.kind == Control.Kind.SPEED || c.kind == Control.Kind.SCREEN
+    private fun utility(c: Control) = c.kind == Control.Kind.MENU || c.kind == Control.Kind.SPEED || c.kind == Control.Kind.SCREEN || c.kind == Control.Kind.SCREEN_VISIBILITY
     private fun cx(c: Control) = if (utility(c))
         menuCoordinate(c.x * width, width, safeInsets.left, safeInsets.right, radius(c)) else c.x * width
     private fun cy(c: Control) = if (utility(c))
@@ -109,6 +112,7 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
     }
 
     private fun onScreen(x: Float, y: Float): Boolean {
+        if (smallScreenHidden && !secondScreenExpanded) return false
         val l = screens   // [4..7] the bottom screen
         return l[6] > l[4] && x >= l[4] && x <= l[6] && y >= l[5] && y <= l[7]
     }
@@ -143,6 +147,7 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
                 Control.Kind.MENU -> onMenu?.invoke()
                 Control.Kind.SPEED -> { held[c] = (held[c] ?: 0) + 1; buzz(); onSpeed?.invoke() }
                 Control.Kind.SCREEN -> { buzz(); onSecondScreen?.invoke(); tapFeedback.release(c.id, SystemClock.uptimeMillis()) }
+                Control.Kind.SCREEN_VISIBILITY -> { buzz(); onScreenVisibility?.invoke(); tapFeedback.release(c.id, SystemClock.uptimeMillis()) }
                 Control.Kind.CIRCLE_PAD, Control.Kind.C_STICK -> { sticks[c] = floatArrayOf(0f, 0f); moveStick(c, x, y) }
                 Control.Kind.DPAD -> held[c] = dpadMask(c, x, y)
                 Control.Kind.COMBO -> {
@@ -287,16 +292,25 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
             stroke.strokeWidth = if (c === selected && editing) 6f else 3f + 2f * feedback
             when (c.kind) {
                 Control.Kind.CIRCLE_PAD, Control.Kind.C_STICK -> {
+                    // Keep the walking pad's theme tint faint, including while held.
+                    if (c.kind == Control.Kind.CIRCLE_PAD) {
+                        fill.color = ColorUtils.blendARGB(FRAME, accent, feedback)
+                        fill.alpha = (a * (.08f + .06f * feedback)).toInt()
+                    }
                     canvas.drawCircle(cx(c), cy(c), r, fill); canvas.drawCircle(cx(c), cy(c), r, stroke)
                     val s = sticks[c]
                     val kx = cx(c) + (s?.get(0) ?: 0f) * r * 0.6f
                     val ky = cy(c) - (s?.get(1) ?: 0f) * r * 0.6f
-                    fill.color = accent; fill.alpha = a
+                    fill.color = accent
+                    fill.alpha = if (c.kind == Control.Kind.CIRCLE_PAD) (a * (.22f + .08f * feedback)).toInt() else a
                     canvas.drawCircle(kx, ky, r * 0.38f, fill)
+                    if (c.kind == Control.Kind.CIRCLE_PAD) {
+                        canvas.drawCircle(kx, ky, r * 0.38f, stroke)
+                    }
                     label(canvas, if (c.kind == Control.Kind.C_STICK) "C" else "", cx(c), cy(c) - r - 6f, r * 0.25f, a)
                 }
                 Control.Kind.DPAD -> drawDpad(canvas, c, r, a)
-                Control.Kind.MENU, Control.Kind.BUTTON, Control.Kind.COMBO, Control.Kind.SPEED, Control.Kind.SCREEN -> {
+                Control.Kind.MENU, Control.Kind.BUTTON, Control.Kind.COMBO, Control.Kind.SPEED, Control.Kind.SCREEN, Control.Kind.SCREEN_VISIBILITY -> {
                     val saved = canvas.save()
                     val scale = 1f - .045f * feedback
                     canvas.scale(scale, scale, cx(c), cy(c))
@@ -310,6 +324,7 @@ class OverlayView(context: Context, var layout: OverlayLayout) : View(context) {
                     val caption = when (c.kind) {
                         Control.Kind.SPEED -> when (speedPercent) { 125 -> "1.25×"; 150 -> "1.5×"; else -> "1×" }
                         Control.Kind.SCREEN -> if (secondScreenExpanded) "Back" else "2nd"
+                        Control.Kind.SCREEN_VISIBILITY -> if (smallScreenHidden) "Show" else "Hide"
                         else -> c.label
                     }
                     label(canvas, caption, cx(c), cy(c), r * if (caption.length > 2) 0.55f else 0.8f,
